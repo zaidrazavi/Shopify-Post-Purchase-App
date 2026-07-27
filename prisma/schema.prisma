@@ -9,8 +9,8 @@ generator client {
 // enough when changing adapters.
 // See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
-  provider = "sqlite"
-  url      = "file:dev.sqlite"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Session {
@@ -43,6 +43,7 @@ model OfferConfig {
   productTitle  String?
   productImage  String?
   productPrice  String? // cached real variant price, e.g. "600.00"
+  productCompareAtPrice String? // cached variant compare-at price, if set
   // Pricing override: "none" | "percentage" | "fixed".
   // percentage -> discountValue is a percent off (0-100).
   // fixed      -> discountValue is the override price the buyer pays.
@@ -51,6 +52,12 @@ model OfferConfig {
   // Copy shown on the offer page.
   headline      String   @default("Wait — one more thing!")
   description   String   @default("Add this to your order before you go.")
+  // Urgency countdown (UI-only, resets per page load).
+  countdownEnabled Boolean @default(false)
+  countdownMinutes Int     @default(10)
+  // Editable call-to-action labels.
+  acceptButtonText  String @default("Add This Gift To My Order")
+  declineButtonText String @default("I'd rather pay full price")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }

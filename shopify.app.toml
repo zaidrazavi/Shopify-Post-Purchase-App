@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "01873b85a6911b4877b2158d1ca4e961"
-application_url = "https://example.com"
+application_url = "https://shopify-post-purchase-app.onrender.com"
 embedded = true
 name = "Drims Post Purchase"
 
@@ -45,8 +45,11 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://shopify-post-purchase-app.onrender.com/auth/callback",
+  "https://shopify-post-purchase-app.onrender.com/auth/shopify/callback",
+  "https://shopify-post-purchase-app.onrender.com/api/auth/callback"
+]
 
 [build]
-include_config_on_deploy = true
 automatically_update_urls_on_dev = true

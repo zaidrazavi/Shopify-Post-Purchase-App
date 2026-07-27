@@ -22,10 +22,15 @@ export const action = async ({ request }) => {
     productTitle: form.get("productTitle"),
     productImage: form.get("productImage"),
     productPrice: form.get("productPrice"),
+    productCompareAtPrice: form.get("productCompareAtPrice"),
     discountType: form.get("discountType"),
     discountValue: form.get("discountValue"),
     headline: form.get("headline"),
     description: form.get("description"),
+    countdownEnabled: form.get("countdownEnabled") === "true",
+    countdownMinutes: form.get("countdownMinutes"),
+    acceptButtonText: form.get("acceptButtonText"),
+    declineButtonText: form.get("declineButtonText"),
   });
 
   return { ok: true, config: saved };
@@ -49,6 +54,7 @@ function toSelectedProduct(picked) {
     title: picked.title ?? null,
     image,
     price: variant?.price ?? null,
+    compareAtPrice: variant?.compareAtPrice ?? null,
   };
 }
 
@@ -65,6 +71,7 @@ export default function OfferSettings() {
           title: config.productTitle,
           image: config.productImage,
           price: config.productPrice,
+          compareAtPrice: config.productCompareAtPrice,
         }
       : null,
   );
@@ -75,6 +82,10 @@ export default function OfferSettings() {
   const discountValueRef = useRef(null);
   const headlineRef = useRef(null);
   const descriptionRef = useRef(null);
+  const countdownEnabledRef = useRef(null);
+  const countdownMinutesRef = useRef(null);
+  const acceptButtonTextRef = useRef(null);
+  const declineButtonTextRef = useRef(null);
 
   const saving = fetcher.state !== "idle";
 
@@ -122,10 +133,15 @@ export default function OfferSettings() {
         productTitle: product?.title ?? "",
         productImage: product?.image ?? "",
         productPrice: product?.price ?? "",
+        productCompareAtPrice: product?.compareAtPrice ?? "",
         discountType,
         discountValue: discountValueRef.current?.value ?? "",
         headline: headlineRef.current?.value ?? "",
         description: descriptionRef.current?.value ?? "",
+        countdownEnabled: String(Boolean(countdownEnabledRef.current?.checked)),
+        countdownMinutes: countdownMinutesRef.current?.value ?? "",
+        acceptButtonText: acceptButtonTextRef.current?.value ?? "",
+        declineButtonText: declineButtonTextRef.current?.value ?? "",
       },
       { method: "POST" },
     );
@@ -161,6 +177,11 @@ export default function OfferSettings() {
               <s-text>{product.title}</s-text>
               {product.price ? (
                 <s-text tone="subdued">Regular price: {product.price}</s-text>
+              ) : null}
+              {product.compareAtPrice ? (
+                <s-text tone="subdued">
+                  Compare-at price: {product.compareAtPrice}
+                </s-text>
               ) : null}
             </s-stack>
           </s-stack>
@@ -209,6 +230,24 @@ export default function OfferSettings() {
         ) : null}
       </s-section>
 
+      <s-section heading="Urgency">
+        <s-switch
+          ref={countdownEnabledRef}
+          name="countdownEnabled"
+          label="Show countdown timer"
+          defaultChecked={config.countdownEnabled}
+          details="Displays a counting-down urgency bar above the offer. It's a visual nudge only — it resets each time the page loads and doesn't expire the offer."
+        />
+        <s-number-field
+          ref={countdownMinutesRef}
+          name="countdownMinutes"
+          label="Countdown length (minutes)"
+          defaultValue={config.countdownMinutes ?? 10}
+          min="1"
+          details="How many minutes the timer starts from."
+        />
+      </s-section>
+
       <s-section heading="Offer text">
         <s-text-field
           ref={headlineRef}
@@ -222,6 +261,18 @@ export default function OfferSettings() {
           label="Description"
           defaultValue={config.description}
           rows="3"
+        />
+        <s-text-field
+          ref={acceptButtonTextRef}
+          name="acceptButtonText"
+          label="Accept button text"
+          defaultValue={config.acceptButtonText}
+        />
+        <s-text-field
+          ref={declineButtonTextRef}
+          name="declineButtonText"
+          label="Decline button text"
+          defaultValue={config.declineButtonText}
         />
       </s-section>
     </s-page>

@@ -12,11 +12,13 @@ import React, { useEffect, useState } from "react";
 import {
   extend,
   render,
+  Banner,
   BlockStack,
   Button,
   CalloutBanner,
   Heading,
   Image,
+  InlineStack,
   Layout,
   Separator,
   Text,
@@ -31,13 +33,12 @@ import {
  * signed with the app's API secret (which must never live in the extension
  * bundle).
  *
- * NOTE: this is the current `shopify app dev` Cloudflare tunnel URL. Trycloudflare
- * tunnels are regenerated every time you restart `shopify app dev`, so if the
- * dev tunnel changes, update this value (find it in the dev server output or in
- * .shopify/dev-bundle/manifest.json under `app_home.app_url`). For production,
- * set it to the deployed app URL (`application_url` in shopify.app.toml).
+ * This is the production app URL (Render). It must match `application_url` in
+ * shopify.app.toml. When developing locally with `shopify app dev`, temporarily
+ * swap this for the printed Cloudflare tunnel URL (found in the dev server
+ * output or .shopify/dev-bundle/manifest.json under `app_home.app_url`).
  */
-const APP_URL = "https://designated-falling-diploma-prize.trycloudflare.com";
+const APP_URL = "https://shopify-post-purchase-app.onrender.com";
 
 /**
  * Fetches the merchant's offer configuration from the app backend. The response
@@ -108,6 +109,23 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
   const [error, setError] = useState(null);
   const [calculatedPurchase, setCalculatedPurchase] = useState(null);
 
+  // Countdown timer: UI-only urgency. Starts from the configured minutes and
+  // resets on every page load (i.e. component mount) — it never expires the
+  // offer or touches inventory.
+  const [secondsLeft, setSecondsLeft] = useState(
+    offer.countdownEnabled
+      ? Math.max(0, Math.round((offer.countdownMinutes ?? 10) * 60))
+      : 0,
+  );
+
+  useEffect(() => {
+    if (!offer.countdownEnabled) return undefined;
+    const id = setInterval(() => {
+      setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [offer.countdownEnabled]);
+
   // Ask Shopify to price the offer against the completed order so we can show
   // an accurate total before the customer accepts.
   useEffect(() => {
@@ -138,12 +156,17 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     };
   }, [calculateChangeset, offer.changes]);
 
-  // Prefer the server-calculated total; fall back to the cached price.
-  const displayPrice =
-    calculatedPurchase?.totalOutstandingSet?.presentmentMoney?.amount ??
-    offer.price;
+  // The final (discounted) price the buyer pays for this item. We use the
+  // config-derived price so it stays consistent with the savings math; the
+  // calculated changeset is still what actually gets charged on accept.
+  const finalPrice = offer.price;
   const displayCurrency =
     calculatedPurchase?.totalOutstandingSet?.presentmentMoney?.currencyCode ?? "";
+
+  const hasSavings = Boolean(offer.compareAtPrice && offer.savings);
+
+  const minutes = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
+  const seconds = String(secondsLeft % 60).padStart(2, "0");
 
   async function acceptOffer() {
     setProcessing(true);
@@ -194,6 +217,14 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
 
   return (
     <BlockStack spacing="loose">
+      {offer.countdownEnabled ? (
+        <Banner status="critical">
+          <Text emphasized>
+            Special Offer Ends In: {minutes}:{seconds}
+          </Text>
+        </Banner>
+      ) : null}
+
       <CalloutBanner title={offer.headline}>{offer.description}</CalloutBanner>
 
       <Layout
@@ -205,17 +236,41 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
         ]}
       >
         <View>
-          <Image source={offer.image} description={offer.title} />
+          {offer.image ? (
+            <Image source={offer.image} description={offer.title} />
+          ) : null}
         </View>
         <View />
         <BlockStack spacing="xloose">
           <TextContainer>
             <Heading>{offer.title}</Heading>
-            <TextBlock>
-              <Text size="large" emphasized>
-                {loading ? "Calculating price…" : `${displayPrice} ${displayCurrency}`}
-              </Text>
-            </TextBlock>
+            {loading ? (
+              <TextBlock>
+                <Text size="large" emphasized>
+                  Calculating price…
+                </Text>
+              </TextBlock>
+            ) : hasSavings ? (
+              <BlockStack spacing="tight">
+                <InlineStack spacing="tight">
+                  <Text size="large" role="deletion" subdued>
+                    {offer.compareAtPrice} {displayCurrency}
+                  </Text>
+                  <Text size="large" emphasized>
+                    {finalPrice} {displayCurrency}
+                  </Text>
+                </InlineStack>
+                <Text appearance="success" emphasized>
+                  You save {offer.savings} {displayCurrency}
+                </Text>
+              </BlockStack>
+            ) : (
+              <TextBlock>
+                <Text size="large" emphasized>
+                  {finalPrice} {displayCurrency}
+                </Text>
+              </TextBlock>
+            )}
           </TextContainer>
 
           {error ? (
@@ -231,7 +286,7 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
               loading={processing}
               disabled={loading || processing}
             >
-              Accept
+              {offer.acceptButtonText}
             </Button>
             <View />
             <Button
@@ -239,7 +294,7 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
               onPress={declineOffer}
               disabled={processing}
             >
-              Decline
+              {offer.declineButtonText}
             </Button>
           </Tiles>
         </BlockStack>

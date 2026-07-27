@@ -9,6 +9,9 @@ import prisma from "../db.server";
 
 export const DISCOUNT_TYPES = ["none", "percentage", "fixed"];
 
+const DEFAULT_ACCEPT_TEXT = "Add This Gift To My Order";
+const DEFAULT_DECLINE_TEXT = "I'd rather pay full price";
+
 const DEFAULT_CONFIG = {
   enabled: false,
   productId: null,
@@ -16,10 +19,15 @@ const DEFAULT_CONFIG = {
   productTitle: null,
   productImage: null,
   productPrice: null,
+  productCompareAtPrice: null,
   discountType: "none",
   discountValue: null,
   headline: "Wait — one more thing!",
   description: "Add this to your order before you go.",
+  countdownEnabled: false,
+  countdownMinutes: 10,
+  acceptButtonText: DEFAULT_ACCEPT_TEXT,
+  declineButtonText: DEFAULT_DECLINE_TEXT,
 };
 
 /** Returns the shop's saved config, or sensible defaults if none exists yet. */
@@ -55,6 +63,12 @@ function normalizeInput(input) {
     return trimmed === "" ? null : trimmed;
   };
 
+  // Countdown minutes: whole number, at least 1, default 10.
+  let countdownMinutes = Number.parseInt(input.countdownMinutes, 10);
+  if (!Number.isFinite(countdownMinutes) || countdownMinutes < 1) {
+    countdownMinutes = DEFAULT_CONFIG.countdownMinutes;
+  }
+
   return {
     enabled: Boolean(input.enabled),
     productId: str(input.productId),
@@ -62,10 +76,15 @@ function normalizeInput(input) {
     productTitle: str(input.productTitle),
     productImage: str(input.productImage),
     productPrice: str(input.productPrice),
+    productCompareAtPrice: str(input.productCompareAtPrice),
     discountType,
     discountValue,
     headline: str(input.headline) ?? DEFAULT_CONFIG.headline,
     description: str(input.description) ?? DEFAULT_CONFIG.description,
+    countdownEnabled: Boolean(input.countdownEnabled),
+    countdownMinutes,
+    acceptButtonText: str(input.acceptButtonText) ?? DEFAULT_ACCEPT_TEXT,
+    declineButtonText: str(input.declineButtonText) ?? DEFAULT_DECLINE_TEXT,
   };
 }
 
@@ -140,11 +159,39 @@ export function offerDisplayPrice(config) {
 }
 
 /**
+ * Compare-at ("was") price and the savings vs the final offer price.
+ *
+ * Returns `{ compareAtPrice, savings }` as formatted strings when the product
+ * has a compare-at price that is higher than what the buyer will pay; otherwise
+ * both are null and the extension falls back to showing just the final price.
+ */
+export function offerSavings(config) {
+  const compareAt = Number.parseFloat(config.productCompareAtPrice);
+  const finalPrice = Number.parseFloat(offerDisplayPrice(config));
+
+  if (!Number.isFinite(compareAt) || !Number.isFinite(finalPrice)) {
+    return { compareAtPrice: null, savings: null };
+  }
+
+  const savings = compareAt - finalPrice;
+  if (savings <= 0) {
+    return { compareAtPrice: null, savings: null };
+  }
+
+  return {
+    compareAtPrice: compareAt.toFixed(2),
+    savings: savings.toFixed(2),
+  };
+}
+
+/**
  * The payload sent to the extension (`/api/offer`). Includes everything the
  * offer page needs to render plus the authoritative `changes` for
  * `calculateChangeset`.
  */
 export function buildOfferPayload(config) {
+  const { compareAtPrice, savings } = offerSavings(config);
+
   return {
     enabled: isOfferReady(config),
     variantId: config.variantId ? Number(config.variantId) : null,
@@ -152,8 +199,14 @@ export function buildOfferPayload(config) {
     title: config.productTitle,
     image: config.productImage,
     price: offerDisplayPrice(config),
+    compareAtPrice,
+    savings,
     headline: config.headline,
     description: config.description,
+    countdownEnabled: Boolean(config.countdownEnabled),
+    countdownMinutes: config.countdownMinutes ?? 10,
+    acceptButtonText: config.acceptButtonText ?? DEFAULT_ACCEPT_TEXT,
+    declineButtonText: config.declineButtonText ?? DEFAULT_DECLINE_TEXT,
     changes: buildOfferChanges(config),
   };
 }
