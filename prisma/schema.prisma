@@ -58,6 +58,23 @@ model OfferConfig {
   // Editable call-to-action labels.
   acceptButtonText  String @default("Add This Gift To My Order")
   declineButtonText String @default("I'd rather pay full price")
+
+  // --- Downsell: a single fallback offer shown when the main offer is declined.
+  // Same shape as the main offer (no countdown of its own).
+  downsellEnabled       Boolean @default(false)
+  downsellProductId     String?
+  downsellVariantId     String?
+  downsellProductTitle  String?
+  downsellProductImage  String?
+  downsellProductPrice  String?
+  downsellProductCompareAtPrice String?
+  downsellDiscountType  String  @default("none")
+  downsellDiscountValue Float?
+  downsellHeadline      String  @default("Hold on — how about this instead?")
+  downsellDescription   String  @default("A smaller add-on at a special price.")
+  downsellAcceptButtonText  String @default("Yes, Add This To My Order")
+  downsellDeclineButtonText String @default("No thanks")
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }

@@ -1,3 +1,6 @@
+// Local presentational helpers below take plain props; this project doesn't use
+// the prop-types runtime checker, so disable that rule for this file.
+/* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -14,23 +17,39 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const form = await request.formData();
+  const get = (k) => form.get(k);
 
   const saved = await saveOfferConfig(session.shop, {
-    enabled: form.get("enabled") === "true",
-    productId: form.get("productId"),
-    variantId: form.get("variantId"),
-    productTitle: form.get("productTitle"),
-    productImage: form.get("productImage"),
-    productPrice: form.get("productPrice"),
-    productCompareAtPrice: form.get("productCompareAtPrice"),
-    discountType: form.get("discountType"),
-    discountValue: form.get("discountValue"),
-    headline: form.get("headline"),
-    description: form.get("description"),
-    countdownEnabled: form.get("countdownEnabled") === "true",
-    countdownMinutes: form.get("countdownMinutes"),
-    acceptButtonText: form.get("acceptButtonText"),
-    declineButtonText: form.get("declineButtonText"),
+    // Main offer
+    enabled: get("enabled") === "true",
+    productId: get("productId"),
+    variantId: get("variantId"),
+    productTitle: get("productTitle"),
+    productImage: get("productImage"),
+    productPrice: get("productPrice"),
+    productCompareAtPrice: get("productCompareAtPrice"),
+    discountType: get("discountType"),
+    discountValue: get("discountValue"),
+    headline: get("headline"),
+    description: get("description"),
+    countdownEnabled: get("countdownEnabled") === "true",
+    countdownMinutes: get("countdownMinutes"),
+    acceptButtonText: get("acceptButtonText"),
+    declineButtonText: get("declineButtonText"),
+    // Downsell offer
+    downsellEnabled: get("downsellEnabled") === "true",
+    downsellProductId: get("downsellProductId"),
+    downsellVariantId: get("downsellVariantId"),
+    downsellProductTitle: get("downsellProductTitle"),
+    downsellProductImage: get("downsellProductImage"),
+    downsellProductPrice: get("downsellProductPrice"),
+    downsellProductCompareAtPrice: get("downsellProductCompareAtPrice"),
+    downsellDiscountType: get("downsellDiscountType"),
+    downsellDiscountValue: get("downsellDiscountValue"),
+    downsellHeadline: get("downsellHeadline"),
+    downsellDescription: get("downsellDescription"),
+    downsellAcceptButtonText: get("downsellAcceptButtonText"),
+    downsellDeclineButtonText: get("downsellDeclineButtonText"),
   });
 
   return { ok: true, config: saved };
@@ -58,12 +77,71 @@ function toSelectedProduct(picked) {
   };
 }
 
+/**
+ * Display-only price calculation for the live preview. The server
+ * (`offer.server.js`) is the authoritative source; this mirrors its rules just
+ * so the preview updates as the merchant edits.
+ */
+function previewPricing(product, discountType, discountValueRaw) {
+  if (!product?.price) return null;
+  const price = Number.parseFloat(product.price);
+  if (!Number.isFinite(price)) return null;
+
+  const dv = Number.parseFloat(discountValueRaw);
+  let finalPrice = price;
+  if (discountType === "percentage" && Number.isFinite(dv) && dv > 0) {
+    finalPrice = price * (1 - dv / 100);
+  } else if (discountType === "fixed" && Number.isFinite(dv)) {
+    finalPrice = dv;
+  }
+  finalPrice = Number.parseFloat(finalPrice.toFixed(2));
+
+  const compareAt = Number.parseFloat(product.compareAtPrice);
+  let compareAtPrice = null;
+  let savings = null;
+  if (Number.isFinite(compareAt) && compareAt > finalPrice) {
+    compareAtPrice = compareAt.toFixed(2);
+    savings = (compareAt - finalPrice).toFixed(2);
+  }
+
+  return { finalPrice: finalPrice.toFixed(2), compareAtPrice, savings };
+}
+
+const SWITCH_FIELDS = new Set([
+  "enabled",
+  "countdownEnabled",
+  "downsellEnabled",
+]);
+
 export default function OfferSettings() {
   const { config } = useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
 
-  const [product, setProduct] = useState(
+  // Reactive mirror of every text/select/number/switch field, so the live
+  // preview and status badge update as the merchant edits. Fields themselves
+  // stay uncontrolled (defaultValue/defaultChecked) to avoid cursor jumps; this
+  // state is kept in sync by a delegated change/input listener on the page.
+  const [form, setForm] = useState(() => ({
+    enabled: Boolean(config.enabled),
+    discountType: config.discountType || "none",
+    discountValue: config.discountValue ?? "",
+    headline: config.headline ?? "",
+    description: config.description ?? "",
+    countdownEnabled: Boolean(config.countdownEnabled),
+    countdownMinutes: config.countdownMinutes ?? 10,
+    acceptButtonText: config.acceptButtonText ?? "",
+    declineButtonText: config.declineButtonText ?? "",
+    downsellEnabled: Boolean(config.downsellEnabled),
+    downsellDiscountType: config.downsellDiscountType || "none",
+    downsellDiscountValue: config.downsellDiscountValue ?? "",
+    downsellHeadline: config.downsellHeadline ?? "",
+    downsellDescription: config.downsellDescription ?? "",
+    downsellAcceptButtonText: config.downsellAcceptButtonText ?? "",
+    downsellDeclineButtonText: config.downsellDeclineButtonText ?? "",
+  }));
+
+  const [mainProduct, setMainProduct] = useState(
     config.variantId
       ? {
           productId: config.productId,
@@ -75,28 +153,44 @@ export default function OfferSettings() {
         }
       : null,
   );
-  const [discountType, setDiscountType] = useState(config.discountType || "none");
+  const [downsellProduct, setDownsellProduct] = useState(
+    config.downsellVariantId
+      ? {
+          productId: config.downsellProductId,
+          variantId: config.downsellVariantId,
+          title: config.downsellProductTitle,
+          image: config.downsellProductImage,
+          price: config.downsellProductPrice,
+          compareAtPrice: config.downsellProductCompareAtPrice,
+        }
+      : null,
+  );
 
-  const enabledRef = useRef(null);
-  const discountTypeRef = useRef(null);
-  const discountValueRef = useRef(null);
-  const headlineRef = useRef(null);
-  const descriptionRef = useRef(null);
-  const countdownEnabledRef = useRef(null);
-  const countdownMinutesRef = useRef(null);
-  const acceptButtonTextRef = useRef(null);
-  const declineButtonTextRef = useRef(null);
-
+  const pageRef = useRef(null);
   const saving = fetcher.state !== "idle";
 
-  // Web components emit native `change` events that React's synthetic `onChange`
-  // doesn't reliably capture, so wire the reactive select via addEventListener.
+  // Delegated listener: web components bubble native change/input events that
+  // React's synthetic onChange doesn't reliably catch, so we mirror them here.
   useEffect(() => {
-    const el = discountTypeRef.current;
+    const el = pageRef.current;
     if (!el) return undefined;
-    const handler = (event) => setDiscountType(event.target.value);
+    const handler = (event) => {
+      const target = event.target;
+      const name = target?.name;
+      if (!name || !(name in form)) return;
+      const value = SWITCH_FIELDS.has(name)
+        ? Boolean(target.checked)
+        : target.value;
+      setForm((prev) => (prev[name] === value ? prev : { ...prev, [name]: value }));
+    };
+    el.addEventListener("input", handler);
     el.addEventListener("change", handler);
-    return () => el.removeEventListener("change", handler);
+    return () => {
+      el.removeEventListener("input", handler);
+      el.removeEventListener("change", handler);
+    };
+    // form keys are stable; we only need to attach once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -105,21 +199,27 @@ export default function OfferSettings() {
     }
   }, [fetcher.data, shopify]);
 
-  async function pickProduct() {
+  async function pickProduct(which) {
     const selection = await shopify.resourcePicker({
       type: "product",
       multiple: false,
       action: "select",
     });
     if (!selection || selection.length === 0) return;
-    setProduct(toSelectedProduct(selection[0]));
+    const product = toSelectedProduct(selection[0]);
+    if (which === "downsell") setDownsellProduct(product);
+    else setMainProduct(product);
   }
 
   function save() {
-    const enabled = Boolean(enabledRef.current?.checked);
-
-    if (enabled && !product?.variantId) {
-      shopify.toast.show("Select a product before enabling the offer", {
+    if (form.enabled && !mainProduct?.variantId) {
+      shopify.toast.show("Select a main offer product before enabling", {
+        isError: true,
+      });
+      return;
+    }
+    if (form.downsellEnabled && !downsellProduct?.variantId) {
+      shopify.toast.show("Select a downsell product before enabling it", {
         isError: true,
       });
       return;
@@ -127,28 +227,48 @@ export default function OfferSettings() {
 
     fetcher.submit(
       {
-        enabled: String(enabled),
-        productId: product?.productId ?? "",
-        variantId: product?.variantId ?? "",
-        productTitle: product?.title ?? "",
-        productImage: product?.image ?? "",
-        productPrice: product?.price ?? "",
-        productCompareAtPrice: product?.compareAtPrice ?? "",
-        discountType,
-        discountValue: discountValueRef.current?.value ?? "",
-        headline: headlineRef.current?.value ?? "",
-        description: descriptionRef.current?.value ?? "",
-        countdownEnabled: String(Boolean(countdownEnabledRef.current?.checked)),
-        countdownMinutes: countdownMinutesRef.current?.value ?? "",
-        acceptButtonText: acceptButtonTextRef.current?.value ?? "",
-        declineButtonText: declineButtonTextRef.current?.value ?? "",
+        enabled: String(form.enabled),
+        productId: mainProduct?.productId ?? "",
+        variantId: mainProduct?.variantId ?? "",
+        productTitle: mainProduct?.title ?? "",
+        productImage: mainProduct?.image ?? "",
+        productPrice: mainProduct?.price ?? "",
+        productCompareAtPrice: mainProduct?.compareAtPrice ?? "",
+        discountType: form.discountType,
+        discountValue: String(form.discountValue ?? ""),
+        headline: form.headline,
+        description: form.description,
+        countdownEnabled: String(form.countdownEnabled),
+        countdownMinutes: String(form.countdownMinutes ?? ""),
+        acceptButtonText: form.acceptButtonText,
+        declineButtonText: form.declineButtonText,
+        downsellEnabled: String(form.downsellEnabled),
+        downsellProductId: downsellProduct?.productId ?? "",
+        downsellVariantId: downsellProduct?.variantId ?? "",
+        downsellProductTitle: downsellProduct?.title ?? "",
+        downsellProductImage: downsellProduct?.image ?? "",
+        downsellProductPrice: downsellProduct?.price ?? "",
+        downsellProductCompareAtPrice: downsellProduct?.compareAtPrice ?? "",
+        downsellDiscountType: form.downsellDiscountType,
+        downsellDiscountValue: String(form.downsellDiscountValue ?? ""),
+        downsellHeadline: form.downsellHeadline,
+        downsellDescription: form.downsellDescription,
+        downsellAcceptButtonText: form.downsellAcceptButtonText,
+        downsellDeclineButtonText: form.downsellDeclineButtonText,
       },
       { method: "POST" },
     );
   }
 
+  const isLive = form.enabled && Boolean(mainProduct?.variantId);
+  const preview = previewPricing(
+    mainProduct,
+    form.discountType,
+    form.discountValue,
+  );
+
   return (
-    <s-page heading="Post-purchase offer">
+    <s-page ref={pageRef} heading="Post-purchase offer">
       <s-button
         slot="primary-action"
         onClick={save}
@@ -157,125 +277,293 @@ export default function OfferSettings() {
         Save
       </s-button>
 
-      <s-section heading="Status">
-        <s-switch
-          ref={enabledRef}
-          name="enabled"
-          label="Enable post-purchase offer"
-          defaultChecked={config.enabled}
-          details="When off, buyers go straight to the Thank You page."
+      {/* ---- Status summary ---- */}
+      <s-section>
+        <s-stack direction="inline" gap="base" alignItems="center">
+          <span
+            style={{
+              width: "10px",
+              height: "10px",
+              borderRadius: "50%",
+              display: "inline-block",
+              background: isLive ? "#29845a" : "#8a8a8a",
+            }}
+          />
+          <s-badge tone={isLive ? "success" : "neutral"}>
+            {isLive ? "Offer is Live" : "Offer is Off"}
+          </s-badge>
+          <s-switch
+            name="enabled"
+            label="Enable post-purchase offer"
+            defaultChecked={config.enabled}
+            details="When off, buyers go straight to the Thank You page."
+          />
+        </s-stack>
+      </s-section>
+
+      {/* ---- Main offer ---- */}
+      <s-section heading="Main offer">
+        <ProductPickerRow
+          product={mainProduct}
+          onPick={() => pickProduct("main")}
+          emptyText="Choose the product offered right after checkout."
         />
-      </s-section>
 
-      <s-section heading="Offer product">
-        {product ? (
-          <s-stack direction="inline" gap="base" alignItems="center">
-            {product.image ? (
-              <s-thumbnail src={product.image} alt={product.title ?? ""} />
-            ) : null}
-            <s-stack direction="block" gap="none">
-              <s-text>{product.title}</s-text>
-              {product.price ? (
-                <s-text tone="subdued">Regular price: {product.price}</s-text>
-              ) : null}
-              {product.compareAtPrice ? (
-                <s-text tone="subdued">
-                  Compare-at price: {product.compareAtPrice}
-                </s-text>
-              ) : null}
-            </s-stack>
-          </s-stack>
-        ) : (
-          <s-paragraph>
-            No product selected yet. Choose the product to offer after checkout.
-          </s-paragraph>
-        )}
-        <s-button onClick={pickProduct}>
-          {product ? "Change product" : "Select product"}
-        </s-button>
-      </s-section>
+        <s-divider />
 
-      <s-section heading="Pricing">
         <s-select
-          ref={discountTypeRef}
           name="discountType"
           label="Price adjustment"
-          value={discountType}
+          value={form.discountType}
         >
           <s-option value="none">Use the product&apos;s regular price</s-option>
           <s-option value="percentage">Percentage discount</s-option>
           <s-option value="fixed">Fixed override price</s-option>
         </s-select>
-
-        {discountType !== "none" ? (
+        {form.discountType !== "none" ? (
           <s-number-field
-            ref={discountValueRef}
             name="discountValue"
             label={
-              discountType === "percentage"
+              form.discountType === "percentage"
                 ? "Discount percentage"
                 : "Override price"
             }
             defaultValue={config.discountValue ?? ""}
             min="0"
-            {...(discountType === "percentage"
+            {...(form.discountType === "percentage"
               ? { suffix: "%", max: "100" }
               : {})}
-            details={
-              discountType === "percentage"
-                ? "Percent off the regular price (0–100)."
-                : "The total price the buyer pays for this item."
-            }
           />
         ) : null}
-      </s-section>
 
-      <s-section heading="Urgency">
+        <s-divider />
+
         <s-switch
-          ref={countdownEnabledRef}
           name="countdownEnabled"
           label="Show countdown timer"
           defaultChecked={config.countdownEnabled}
-          details="Displays a counting-down urgency bar above the offer. It's a visual nudge only — it resets each time the page loads and doesn't expire the offer."
+          details="A visual urgency bar above the offer. Resets each page load; never expires the offer."
         />
         <s-number-field
-          ref={countdownMinutesRef}
           name="countdownMinutes"
           label="Countdown length (minutes)"
           defaultValue={config.countdownMinutes ?? 10}
           min="1"
-          details="How many minutes the timer starts from."
         />
-      </s-section>
 
-      <s-section heading="Offer text">
+        <s-divider />
+
         <s-text-field
-          ref={headlineRef}
           name="headline"
           label="Headline"
           defaultValue={config.headline}
         />
         <s-text-area
-          ref={descriptionRef}
           name="description"
           label="Description"
           defaultValue={config.description}
-          rows="3"
+          rows="2"
         />
         <s-text-field
-          ref={acceptButtonTextRef}
           name="acceptButtonText"
           label="Accept button text"
           defaultValue={config.acceptButtonText}
         />
         <s-text-field
-          ref={declineButtonTextRef}
           name="declineButtonText"
           label="Decline button text"
           defaultValue={config.declineButtonText}
         />
       </s-section>
+
+      {/* ---- Downsell ---- */}
+      <s-section heading="Downsell (shown if the main offer is declined)">
+        <s-switch
+          name="downsellEnabled"
+          label="Enable downsell"
+          defaultChecked={config.downsellEnabled}
+          details="When off, declining the main offer goes straight to the Thank You page."
+        />
+
+        <ProductPickerRow
+          product={downsellProduct}
+          onPick={() => pickProduct("downsell")}
+          emptyText="Choose the fallback product shown after a decline."
+        />
+
+        <s-divider />
+
+        <s-select
+          name="downsellDiscountType"
+          label="Price adjustment"
+          value={form.downsellDiscountType}
+        >
+          <s-option value="none">Use the product&apos;s regular price</s-option>
+          <s-option value="percentage">Percentage discount</s-option>
+          <s-option value="fixed">Fixed override price</s-option>
+        </s-select>
+        {form.downsellDiscountType !== "none" ? (
+          <s-number-field
+            name="downsellDiscountValue"
+            label={
+              form.downsellDiscountType === "percentage"
+                ? "Discount percentage"
+                : "Override price"
+            }
+            defaultValue={config.downsellDiscountValue ?? ""}
+            min="0"
+            {...(form.downsellDiscountType === "percentage"
+              ? { suffix: "%", max: "100" }
+              : {})}
+          />
+        ) : null}
+
+        <s-divider />
+
+        <s-text-field
+          name="downsellHeadline"
+          label="Headline"
+          defaultValue={config.downsellHeadline}
+        />
+        <s-text-area
+          name="downsellDescription"
+          label="Description"
+          defaultValue={config.downsellDescription}
+          rows="2"
+        />
+        <s-text-field
+          name="downsellAcceptButtonText"
+          label="Accept button text"
+          defaultValue={config.downsellAcceptButtonText}
+        />
+        <s-text-field
+          name="downsellDeclineButtonText"
+          label="Decline button text"
+          defaultValue={config.downsellDeclineButtonText}
+        />
+      </s-section>
+
+      {/* ---- Live preview (right column) ---- */}
+      <s-section slot="aside" heading="Live preview">
+        <OfferPreview
+          product={mainProduct}
+          pricing={preview}
+          headline={form.headline}
+          description={form.description}
+          acceptText={form.acceptButtonText}
+          declineText={form.declineButtonText}
+          countdownEnabled={form.countdownEnabled}
+          countdownMinutes={form.countdownMinutes}
+        />
+        {form.downsellEnabled && downsellProduct ? (
+          <s-text type="small">
+            ↓ If declined, a downsell for “{downsellProduct.title}” is shown next.
+          </s-text>
+        ) : null}
+      </s-section>
     </s-page>
+  );
+}
+
+function ProductPickerRow({ product, onPick, emptyText }) {
+  return (
+    <s-stack direction="block" gap="base">
+      {product ? (
+        <s-stack direction="inline" gap="base" alignItems="center">
+          {product.image ? (
+            <s-thumbnail
+              src={product.image}
+              alt={product.title ?? ""}
+              size="large"
+            />
+          ) : null}
+          <s-stack direction="block" gap="none">
+            <s-text type="strong">{product.title}</s-text>
+            <s-stack direction="inline" gap="tight">
+              {product.price ? <s-text>{product.price}</s-text> : null}
+              {product.compareAtPrice ? (
+                <s-text type="small">was {product.compareAtPrice}</s-text>
+              ) : null}
+            </s-stack>
+          </s-stack>
+        </s-stack>
+      ) : (
+        <s-paragraph>{emptyText}</s-paragraph>
+      )}
+      <s-button onClick={onPick}>
+        {product ? "Change product" : "Select product"}
+      </s-button>
+    </s-stack>
+  );
+}
+
+function OfferPreview({
+  product,
+  pricing,
+  headline,
+  description,
+  acceptText,
+  declineText,
+  countdownEnabled,
+  countdownMinutes,
+}) {
+  if (!product) {
+    return (
+      <s-paragraph>Select a main offer product to preview it here.</s-paragraph>
+    );
+  }
+
+  const mins = String(Math.max(1, Number.parseInt(countdownMinutes, 10) || 10))
+    .toString()
+    .padStart(2, "0");
+
+  return (
+    <s-box
+      padding="base"
+      borderWidth="base"
+      borderRadius="base"
+      background="subdued"
+    >
+      <s-stack direction="block" gap="base">
+        {countdownEnabled ? (
+          <s-banner tone="critical">
+            <s-text type="strong">Special Offer Ends In: {mins}:00</s-text>
+          </s-banner>
+        ) : null}
+
+        {headline ? <s-heading>{headline}</s-heading> : null}
+        {description ? <s-paragraph>{description}</s-paragraph> : null}
+
+        {product.image ? (
+          <s-thumbnail
+            src={product.image}
+            alt={product.title ?? ""}
+            size="large-500"
+          />
+        ) : null}
+
+        <s-text type="strong">{product.title}</s-text>
+
+        {pricing ? (
+          <s-stack direction="block" gap="none">
+            <s-stack direction="inline" gap="tight" alignItems="center">
+              {pricing.compareAtPrice ? (
+                <s-text type="redundant">{pricing.compareAtPrice}</s-text>
+              ) : null}
+              <s-text type="strong">{pricing.finalPrice}</s-text>
+            </s-stack>
+            {pricing.savings ? (
+              <s-badge tone="success">You save {pricing.savings}</s-badge>
+            ) : null}
+          </s-stack>
+        ) : null}
+
+        <s-stack direction="block" gap="tight">
+          <s-button variant="primary">{acceptText || "Accept"}</s-button>
+          <s-button variant="tertiary">{declineText || "Decline"}</s-button>
+        </s-stack>
+      </s-stack>
+    </s-box>
   );
 }
 

@@ -9,8 +9,17 @@ import prisma from "../db.server";
 
 export const DISCOUNT_TYPES = ["none", "percentage", "fixed"];
 
+/** Valid post-purchase steps the extension can request a changeset for. */
+export const OFFER_KINDS = ["main", "downsell"];
+
 const DEFAULT_ACCEPT_TEXT = "Add This Gift To My Order";
 const DEFAULT_DECLINE_TEXT = "I'd rather pay full price";
+const DEFAULT_HEADLINE = "Wait — one more thing!";
+const DEFAULT_DESCRIPTION = "Add this to your order before you go.";
+const DEFAULT_DOWNSELL_ACCEPT_TEXT = "Yes, Add This To My Order";
+const DEFAULT_DOWNSELL_DECLINE_TEXT = "No thanks";
+const DEFAULT_DOWNSELL_HEADLINE = "Hold on — how about this instead?";
+const DEFAULT_DOWNSELL_DESCRIPTION = "A smaller add-on at a special price.";
 
 const DEFAULT_CONFIG = {
   enabled: false,
@@ -22,12 +31,25 @@ const DEFAULT_CONFIG = {
   productCompareAtPrice: null,
   discountType: "none",
   discountValue: null,
-  headline: "Wait — one more thing!",
-  description: "Add this to your order before you go.",
+  headline: DEFAULT_HEADLINE,
+  description: DEFAULT_DESCRIPTION,
   countdownEnabled: false,
   countdownMinutes: 10,
   acceptButtonText: DEFAULT_ACCEPT_TEXT,
   declineButtonText: DEFAULT_DECLINE_TEXT,
+  downsellEnabled: false,
+  downsellProductId: null,
+  downsellVariantId: null,
+  downsellProductTitle: null,
+  downsellProductImage: null,
+  downsellProductPrice: null,
+  downsellProductCompareAtPrice: null,
+  downsellDiscountType: "none",
+  downsellDiscountValue: null,
+  downsellHeadline: DEFAULT_DOWNSELL_HEADLINE,
+  downsellDescription: DEFAULT_DOWNSELL_DESCRIPTION,
+  downsellAcceptButtonText: DEFAULT_DOWNSELL_ACCEPT_TEXT,
+  downsellDeclineButtonText: DEFAULT_DOWNSELL_DECLINE_TEXT,
 };
 
 /** Returns the shop's saved config, or sensible defaults if none exists yet. */
@@ -46,22 +68,25 @@ export async function saveOfferConfig(shop, input) {
   });
 }
 
+const str = (v) => {
+  if (v === undefined || v === null) return null;
+  const trimmed = String(v).trim();
+  return trimmed === "" ? null : trimmed;
+};
+
+function normDiscountType(v) {
+  return DISCOUNT_TYPES.includes(v) ? v : "none";
+}
+
+function normDiscountValue(discountType, raw) {
+  if (discountType === "none") return null;
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function normalizeInput(input) {
-  const discountType = DISCOUNT_TYPES.includes(input.discountType)
-    ? input.discountType
-    : "none";
-
-  let discountValue = null;
-  if (discountType !== "none") {
-    const parsed = Number.parseFloat(input.discountValue);
-    discountValue = Number.isFinite(parsed) ? parsed : null;
-  }
-
-  const str = (v) => {
-    if (v === undefined || v === null) return null;
-    const trimmed = String(v).trim();
-    return trimmed === "" ? null : trimmed;
-  };
+  const discountType = normDiscountType(input.discountType);
+  const downsellDiscountType = normDiscountType(input.downsellDiscountType);
 
   // Countdown minutes: whole number, at least 1, default 10.
   let countdownMinutes = Number.parseInt(input.countdownMinutes, 10);
@@ -70,6 +95,7 @@ function normalizeInput(input) {
   }
 
   return {
+    // Main offer
     enabled: Boolean(input.enabled),
     productId: str(input.productId),
     variantId: str(input.variantId),
@@ -78,46 +104,111 @@ function normalizeInput(input) {
     productPrice: str(input.productPrice),
     productCompareAtPrice: str(input.productCompareAtPrice),
     discountType,
-    discountValue,
-    headline: str(input.headline) ?? DEFAULT_CONFIG.headline,
-    description: str(input.description) ?? DEFAULT_CONFIG.description,
+    discountValue: normDiscountValue(discountType, input.discountValue),
+    headline: str(input.headline) ?? DEFAULT_HEADLINE,
+    description: str(input.description) ?? DEFAULT_DESCRIPTION,
     countdownEnabled: Boolean(input.countdownEnabled),
     countdownMinutes,
     acceptButtonText: str(input.acceptButtonText) ?? DEFAULT_ACCEPT_TEXT,
     declineButtonText: str(input.declineButtonText) ?? DEFAULT_DECLINE_TEXT,
+    // Downsell offer
+    downsellEnabled: Boolean(input.downsellEnabled),
+    downsellProductId: str(input.downsellProductId),
+    downsellVariantId: str(input.downsellVariantId),
+    downsellProductTitle: str(input.downsellProductTitle),
+    downsellProductImage: str(input.downsellProductImage),
+    downsellProductPrice: str(input.downsellProductPrice),
+    downsellProductCompareAtPrice: str(input.downsellProductCompareAtPrice),
+    downsellDiscountType,
+    downsellDiscountValue: normDiscountValue(
+      downsellDiscountType,
+      input.downsellDiscountValue,
+    ),
+    downsellHeadline: str(input.downsellHeadline) ?? DEFAULT_DOWNSELL_HEADLINE,
+    downsellDescription:
+      str(input.downsellDescription) ?? DEFAULT_DOWNSELL_DESCRIPTION,
+    downsellAcceptButtonText:
+      str(input.downsellAcceptButtonText) ?? DEFAULT_DOWNSELL_ACCEPT_TEXT,
+    downsellDeclineButtonText:
+      str(input.downsellDeclineButtonText) ?? DEFAULT_DOWNSELL_DECLINE_TEXT,
   };
-}
-
-/** True when the offer is switched on and points at a real variant. */
-export function isOfferReady(config) {
-  return Boolean(config.enabled && config.variantId);
 }
 
 /**
- * Builds the post-purchase changeset `changes` array from the config. This is
- * the authoritative source for what gets added/discounted — the checkout API
- * routes derive it here rather than trusting anything from the extension.
+ * Extracts a single offer (main or downsell) from a stored config into one
+ * normalized shape, so the shaping helpers below work the same for both.
  */
-export function buildOfferChanges(config) {
-  if (!config.variantId) return [];
+export function pickOffer(config, kind) {
+  if (kind === "downsell") {
+    return {
+      kind: "downsell",
+      enabled: Boolean(config.downsellEnabled),
+      productId: config.downsellProductId ?? null,
+      variantId: config.downsellVariantId ?? null,
+      productTitle: config.downsellProductTitle ?? null,
+      productImage: config.downsellProductImage ?? null,
+      productPrice: config.downsellProductPrice ?? null,
+      productCompareAtPrice: config.downsellProductCompareAtPrice ?? null,
+      discountType: config.downsellDiscountType ?? "none",
+      discountValue: config.downsellDiscountValue ?? null,
+      headline: config.downsellHeadline ?? DEFAULT_DOWNSELL_HEADLINE,
+      description: config.downsellDescription ?? DEFAULT_DOWNSELL_DESCRIPTION,
+      acceptButtonText:
+        config.downsellAcceptButtonText ?? DEFAULT_DOWNSELL_ACCEPT_TEXT,
+      declineButtonText:
+        config.downsellDeclineButtonText ?? DEFAULT_DOWNSELL_DECLINE_TEXT,
+    };
+  }
+
+  return {
+    kind: "main",
+    enabled: Boolean(config.enabled),
+    productId: config.productId ?? null,
+    variantId: config.variantId ?? null,
+    productTitle: config.productTitle ?? null,
+    productImage: config.productImage ?? null,
+    productPrice: config.productPrice ?? null,
+    productCompareAtPrice: config.productCompareAtPrice ?? null,
+    discountType: config.discountType ?? "none",
+    discountValue: config.discountValue ?? null,
+    headline: config.headline ?? DEFAULT_HEADLINE,
+    description: config.description ?? DEFAULT_DESCRIPTION,
+    acceptButtonText: config.acceptButtonText ?? DEFAULT_ACCEPT_TEXT,
+    declineButtonText: config.declineButtonText ?? DEFAULT_DECLINE_TEXT,
+  };
+}
+
+/** True when an offer is switched on and points at a real variant. */
+export function isOfferReady(offer) {
+  return Boolean(offer.enabled && offer.variantId);
+}
+
+/**
+ * Builds the post-purchase changeset `changes` array for a normalized offer.
+ * This is the authoritative source for what gets added/discounted — the
+ * checkout API routes derive it here rather than trusting anything from the
+ * extension.
+ */
+export function buildOfferChanges(offer) {
+  if (!offer.variantId) return [];
 
   const change = {
     type: "add_variant",
-    variantId: Number(config.variantId),
+    variantId: Number(offer.variantId),
     quantity: 1,
   };
 
-  const discount = buildDiscount(config);
+  const discount = buildDiscount(offer);
   if (discount) change.discount = discount;
 
   return [change];
 }
 
-function buildDiscount(config) {
-  const value = config.discountValue;
+function buildDiscount(offer) {
+  const value = offer.discountValue;
   if (value == null) return null;
 
-  if (config.discountType === "percentage" && value > 0) {
+  if (offer.discountType === "percentage" && value > 0) {
     return {
       value,
       valueType: "percentage",
@@ -125,10 +216,10 @@ function buildDiscount(config) {
     };
   }
 
-  if (config.discountType === "fixed") {
+  if (offer.discountType === "fixed") {
     // A fixed *override price* is expressed to the changeset as a fixed amount
     // off the real variant price.
-    const price = Number.parseFloat(config.productPrice);
+    const price = Number.parseFloat(offer.productPrice);
     if (Number.isFinite(price)) {
       const amountOff = Math.max(0, price - value);
       if (amountOff > 0) {
@@ -145,15 +236,15 @@ function buildDiscount(config) {
 }
 
 /** The price to show as a fallback before `calculateChangeset` resolves. */
-export function offerDisplayPrice(config) {
-  const price = Number.parseFloat(config.productPrice);
-  if (!Number.isFinite(price)) return config.productPrice;
+export function offerDisplayPrice(offer) {
+  const price = Number.parseFloat(offer.productPrice);
+  if (!Number.isFinite(price)) return offer.productPrice;
 
-  if (config.discountType === "percentage" && config.discountValue > 0) {
-    return (price * (1 - config.discountValue / 100)).toFixed(2);
+  if (offer.discountType === "percentage" && offer.discountValue > 0) {
+    return (price * (1 - offer.discountValue / 100)).toFixed(2);
   }
-  if (config.discountType === "fixed" && config.discountValue != null) {
-    return Number(config.discountValue).toFixed(2);
+  if (offer.discountType === "fixed" && offer.discountValue != null) {
+    return Number(offer.discountValue).toFixed(2);
   }
   return price.toFixed(2);
 }
@@ -161,13 +252,13 @@ export function offerDisplayPrice(config) {
 /**
  * Compare-at ("was") price and the savings vs the final offer price.
  *
- * Returns `{ compareAtPrice, savings }` as formatted strings when the product
- * has a compare-at price that is higher than what the buyer will pay; otherwise
- * both are null and the extension falls back to showing just the final price.
+ * Returns `{ compareAtPrice, savings }` as formatted strings when the offer has
+ * a compare-at price that is higher than what the buyer will pay; otherwise both
+ * are null and the extension falls back to showing just the final price.
  */
-export function offerSavings(config) {
-  const compareAt = Number.parseFloat(config.productCompareAtPrice);
-  const finalPrice = Number.parseFloat(offerDisplayPrice(config));
+export function offerSavings(offer) {
+  const compareAt = Number.parseFloat(offer.productCompareAtPrice);
+  const finalPrice = Number.parseFloat(offerDisplayPrice(offer));
 
   if (!Number.isFinite(compareAt) || !Number.isFinite(finalPrice)) {
     return { compareAtPrice: null, savings: null };
@@ -184,30 +275,44 @@ export function offerSavings(config) {
   };
 }
 
-/**
- * The payload sent to the extension (`/api/offer`). Includes everything the
- * offer page needs to render plus the authoritative `changes` for
- * `calculateChangeset`.
- */
-export function buildOfferPayload(config) {
-  const { compareAtPrice, savings } = offerSavings(config);
+/** Everything the extension needs to render one offer step. */
+function offerView(offer) {
+  const { compareAtPrice, savings } = offerSavings(offer);
 
   return {
-    enabled: isOfferReady(config),
-    variantId: config.variantId ? Number(config.variantId) : null,
+    enabled: isOfferReady(offer),
+    variantId: offer.variantId ? Number(offer.variantId) : null,
     quantity: 1,
-    title: config.productTitle,
-    image: config.productImage,
-    price: offerDisplayPrice(config),
+    title: offer.productTitle,
+    image: offer.productImage,
+    price: offerDisplayPrice(offer),
     compareAtPrice,
     savings,
-    headline: config.headline,
-    description: config.description,
+    headline: offer.headline,
+    description: offer.description,
+    acceptButtonText: offer.acceptButtonText,
+    declineButtonText: offer.declineButtonText,
+    changes: buildOfferChanges(offer),
+  };
+}
+
+/**
+ * The payload sent to the extension (`/api/offer`). The main offer's fields sit
+ * at the top level (so `ShouldRender` can gate on `enabled`), and the optional
+ * downsell is nested under `downsell` (null when it isn't ready). Both are
+ * pre-fetched together so the extension never needs a network call to move from
+ * the main step to the downsell step.
+ */
+export function buildOfferPayload(config) {
+  const main = pickOffer(config, "main");
+  const downsell = pickOffer(config, "downsell");
+  const downsellView = isOfferReady(downsell) ? offerView(downsell) : null;
+
+  return {
+    ...offerView(main),
     countdownEnabled: Boolean(config.countdownEnabled),
     countdownMinutes: config.countdownMinutes ?? 10,
-    acceptButtonText: config.acceptButtonText ?? DEFAULT_ACCEPT_TEXT,
-    declineButtonText: config.declineButtonText ?? DEFAULT_DECLINE_TEXT,
-    changes: buildOfferChanges(config),
+    downsell: downsellView,
   };
 }
 

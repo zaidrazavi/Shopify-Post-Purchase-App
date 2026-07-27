@@ -101,35 +101,46 @@ render("Checkout::PostPurchase::Render", App);
 
 // Top-level React component
 export function App({ storage, inputData, calculateChangeset, applyChangeset, done }) {
-  // `ShouldRender` only renders when a valid offer was stored, so this is present.
-  const offer = storage.initialData?.offer;
+  // `ShouldRender` stored the full payload: main offer fields at the top level,
+  // plus an optional nested `downsell`. Both are pre-fetched so switching steps
+  // needs no network call.
+  const payload = storage.initialData?.offer;
+  const mainOffer = payload;
+  const downsellOffer = payload?.downsell ?? null;
+
+  // "main" = the upsell shown first; "downsell" = the fallback after a decline.
+  const [step, setStep] = useState("main");
+  const offer = step === "downsell" && downsellOffer ? downsellOffer : mainOffer;
 
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState(null);
   const [calculatedPurchase, setCalculatedPurchase] = useState(null);
 
-  // Countdown timer: UI-only urgency. Starts from the configured minutes and
-  // resets on every page load (i.e. component mount) — it never expires the
-  // offer or touches inventory.
+  // Countdown timer: UI-only urgency on the main step. Starts from the
+  // configured minutes and resets on page load — it never expires the offer or
+  // touches inventory.
   const [secondsLeft, setSecondsLeft] = useState(
-    offer.countdownEnabled
-      ? Math.max(0, Math.round((offer.countdownMinutes ?? 10) * 60))
+    mainOffer.countdownEnabled
+      ? Math.max(0, Math.round((mainOffer.countdownMinutes ?? 10) * 60))
       : 0,
   );
 
   useEffect(() => {
-    if (!offer.countdownEnabled) return undefined;
+    if (!mainOffer.countdownEnabled || step !== "main") return undefined;
     const id = setInterval(() => {
       setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
     }, 1000);
     return () => clearInterval(id);
-  }, [offer.countdownEnabled]);
+  }, [mainOffer.countdownEnabled, step]);
 
-  // Ask Shopify to price the offer against the completed order so we can show
-  // an accurate total before the customer accepts.
+  // Price the currently shown offer against the completed order. Re-runs when
+  // the step changes so the downsell gets its own accurate total.
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setCalculatedPurchase(null);
 
     async function calculate() {
       try {
@@ -164,6 +175,7 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     calculatedPurchase?.totalOutstandingSet?.presentmentMoney?.currencyCode ?? "";
 
   const hasSavings = Boolean(offer.compareAtPrice && offer.savings);
+  const showCountdown = step === "main" && mainOffer.countdownEnabled;
 
   const minutes = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
   const seconds = String(secondsLeft % 60).padStart(2, "0");
@@ -175,7 +187,8 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     try {
       // The changeset must be signed by our backend with the app's API secret
       // before it can be applied. `inputData.token` proves this request came
-      // from a genuine post-purchase page.
+      // from a genuine post-purchase page; `offer` tells the backend which step
+      // (main or downsell) to sign so it rebuilds the authoritative changes.
       const response = await fetch(`${APP_URL}/api/sign-changeset`, {
         method: "POST",
         headers: {
@@ -185,6 +198,7 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
         body: JSON.stringify({
           referenceId: inputData.initialPurchase.referenceId,
           shop: inputData.shop.domain,
+          offer: step,
         }),
       });
 
@@ -211,13 +225,19 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
   }
 
   function declineOffer() {
-    // Skip the offer and proceed to the Thank You page.
+    // Declining the main offer moves to the downsell (if configured); declining
+    // the downsell (or the main offer when there's no downsell) ends the flow.
+    if (step === "main" && downsellOffer) {
+      setProcessing(false);
+      setStep("downsell");
+      return;
+    }
     done();
   }
 
   return (
     <BlockStack spacing="loose">
-      {offer.countdownEnabled ? (
+      {showCountdown ? (
         <Banner status="critical">
           <Text emphasized>
             Special Offer Ends In: {minutes}:{seconds}

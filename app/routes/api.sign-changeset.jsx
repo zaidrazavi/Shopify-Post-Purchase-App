@@ -6,6 +6,7 @@ import {
   buildOfferChanges,
   getOfferConfig,
   isOfferReady,
+  pickOffer,
   resolveShopDomain,
 } from "../models/offer.server";
 
@@ -35,21 +36,25 @@ export const action = async ({ request }) => {
   // gives us a `cors` helper for the response.
   const { cors, sessionToken } = await authenticate.public.checkout(request);
 
-  const { referenceId, shop: bodyShop } = await request.json();
+  const { referenceId, shop: bodyShop, offer: offerKind } = await request.json();
   const shop = resolveShopDomain(sessionToken, bodyShop);
 
   if (!shop) {
     return cors(Response.json({ error: "unknown_shop" }, { status: 400 }));
   }
 
+  // Which step the buyer accepted — defaults to the main offer.
+  const kind = offerKind === "downsell" ? "downsell" : "main";
   const config = await getOfferConfig(shop);
-  if (!isOfferReady(config)) {
+  const offer = pickOffer(config, kind);
+
+  if (!isOfferReady(offer)) {
     return cors(
       Response.json({ error: "offer_not_available" }, { status: 409 }),
     );
   }
 
-  const changes = buildOfferChanges(config);
+  const changes = buildOfferChanges(offer);
 
   const payload = {
     iss: process.env.SHOPIFY_API_KEY, // client id of the app
