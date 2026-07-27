@@ -280,16 +280,10 @@ export default function OfferSettings() {
       {/* ---- Status summary ---- */}
       <s-section>
         <s-stack direction="inline" gap="base" alignItems="center">
-          <span
-            style={{
-              width: "10px",
-              height: "10px",
-              borderRadius: "50%",
-              display: "inline-block",
-              background: isLive ? "#29845a" : "#8a8a8a",
-            }}
-          />
-          <s-badge tone={isLive ? "success" : "neutral"}>
+          <s-badge
+            tone={isLive ? "success" : "neutral"}
+            icon={isLive ? "check-circle" : "disabled"}
+          >
             {isLive ? "Offer is Live" : "Offer is Off"}
           </s-badge>
           <s-switch
@@ -303,6 +297,10 @@ export default function OfferSettings() {
 
       {/* ---- Main offer ---- */}
       <s-section heading="Main offer">
+        <s-badge tone="info" icon="cart-sale">
+          Step 1 · Shown first
+        </s-badge>
+
         <ProductPickerRow
           product={mainProduct}
           onPick={() => pickProduct("main")}
@@ -374,10 +372,20 @@ export default function OfferSettings() {
           label="Decline button text"
           defaultValue={config.declineButtonText}
         />
+
+        <s-divider />
+        <StatRow accentTone="info" />
       </s-section>
+
+      {/* ---- Flow connector: main -> downsell ---- */}
+      <FlowConnector />
 
       {/* ---- Downsell ---- */}
       <s-section heading="Downsell (shown if the main offer is declined)">
+        <s-badge tone="warning" icon="cart-down">
+          Step 2 · If declined
+        </s-badge>
+
         <s-switch
           name="downsellEnabled"
           label="Enable downsell"
@@ -441,6 +449,9 @@ export default function OfferSettings() {
           label="Decline button text"
           defaultValue={config.downsellDeclineButtonText}
         />
+
+        <s-divider />
+        <StatRow accentTone="warning" />
       </s-section>
 
       {/* ---- Live preview (right column) ---- */}
@@ -456,12 +467,87 @@ export default function OfferSettings() {
           countdownMinutes={form.countdownMinutes}
         />
         {form.downsellEnabled && downsellProduct ? (
-          <s-text type="small">
-            ↓ If declined, a downsell for “{downsellProduct.title}” is shown next.
-          </s-text>
+          <s-stack direction="block" gap="tight">
+            <s-divider />
+            <s-stack direction="inline" gap="tight" alignItems="center">
+              <s-icon type="arrow-down" tone="warning" />
+              <s-badge tone="warning" icon="cart-down">
+                Step 2 · Downsell
+              </s-badge>
+            </s-stack>
+            <s-text type="small">
+              If the main offer is declined, “{downsellProduct.title}” is shown
+              next.
+            </s-text>
+          </s-stack>
         ) : null}
       </s-section>
     </s-page>
+  );
+}
+
+// Visual connector between the main offer and downsell cards.
+function FlowConnector() {
+  return (
+    <s-box paddingBlock="base">
+      <s-stack direction="block" gap="none" alignItems="center">
+        <s-icon type="arrow-down" tone="warning" size="large" />
+        <s-badge tone="warning">If declined, show the downsell</s-badge>
+      </s-stack>
+    </s-box>
+  );
+}
+
+const STAT_TILES = [
+  { label: "Views", icon: "view" },
+  { label: "Accepted", icon: "order-fulfilled" },
+  { label: "Revenue", icon: "cash-dollar" },
+];
+
+// Placeholder dashboard metrics — real analytics tracking isn't wired yet, so
+// each shows an em dash. The "Coming soon" caption makes clear these aren't
+// broken values.
+function StatRow({ accentTone }) {
+  return (
+    <s-stack direction="block" gap="tight">
+      <s-stack direction="inline" gap="base">
+        {STAT_TILES.map((stat) => (
+          <StatTile
+            key={stat.label}
+            label={stat.label}
+            icon={stat.icon}
+            tone={accentTone}
+          />
+        ))}
+      </s-stack>
+      <s-stack direction="inline" gap="tight" alignItems="center">
+        <s-badge tone="info" icon="clock">
+          Coming soon
+        </s-badge>
+        <s-text type="small">
+          Live stats will appear here once tracking is added.
+        </s-text>
+      </s-stack>
+    </s-stack>
+  );
+}
+
+function StatTile({ label, icon, tone }) {
+  return (
+    <s-box
+      padding="base"
+      borderWidth="base"
+      borderRadius="base"
+      background="subdued"
+    >
+      <s-stack direction="block" gap="none">
+        <s-stack direction="inline" gap="tight" alignItems="center">
+          <s-icon type={icon} tone={tone} />
+          <s-text type="small">{label}</s-text>
+        </s-stack>
+        <s-text type="strong">—</s-text>
+      </s-stack>
+    </s-box>
   );
 }
 
