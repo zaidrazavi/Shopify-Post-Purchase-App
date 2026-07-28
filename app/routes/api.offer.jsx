@@ -24,11 +24,25 @@ export const action = async ({ request }) => {
 
   const body = await request.json().catch(() => ({}));
   const shop = resolveShopDomain(sessionToken, body.shop);
+  const ref = body?.referenceId ?? "?";
+
   if (!shop) {
     // Can't tell which shop this is, so there's no offer to show.
+    console.log(`[post-purchase] /api/offer HIT shop=UNRESOLVED ref=${ref}`);
     return cors(Response.json({ enabled: false }));
   }
 
   const config = await getOfferConfig(shop);
-  return cors(Response.json(buildOfferPayload(config)));
+  const payload = buildOfferPayload(config);
+
+  // Presence of this line in the Render logs proves Shopify actually called the
+  // extension's ShouldRender network fetch. `enabled=true` means we returned a
+  // valid offer — so anything not showing after that is platform-side gating
+  // (payment not vaulted, app not selected as the post-purchase provider, etc.).
+  console.log(
+    `[post-purchase] /api/offer HIT shop=${shop} enabled=${payload.enabled} ` +
+      `variantId=${payload.variantId ?? "none"} downsell=${payload.downsell ? "yes" : "no"} ref=${ref}`,
+  );
+
+  return cors(Response.json(payload));
 };
