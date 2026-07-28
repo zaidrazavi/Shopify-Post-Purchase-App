@@ -1,0 +1,27 @@
+name: Keep Render warm
+
+# Pings the app's /healthz endpoint on a schedule so the Render free instance
+# doesn't spin down (a cold start would make the post-purchase offer fail to
+# load within Shopify's ShouldRender time budget).
+#
+# Note: GitHub's scheduled runs are best-effort and can be delayed a few minutes
+# under load, and scheduled workflows are paused after ~60 days of no repo
+# activity. For guaranteed uptime, use a paid Render instance or an external
+# uptime pinger (UptimeRobot, cron-job.org). This is the free, in-repo option.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # every 10 minutes (spindown is ~15 min)
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+permissions: {} # no repository permissions needed — it only makes an outbound request
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /healthz
+        run: |
+          curl -fsS --retry 2 --max-time 90 \
+            "https://shopify-post-purchase-app.onrender.com/healthz"
+          echo " — pinged ok"
