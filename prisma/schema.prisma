@@ -78,3 +78,51 @@ model OfferConfig {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
+
+// Pre-purchase (cart/checkout-click) upsell popup, configured per shop.
+// Completely separate from OfferConfig (post-purchase).
+model PrePurchasePopupConfig {
+  shop    String  @id
+  enabled Boolean @default(false)
+
+  // --- General (look & feel) ---
+  fontFamily      String @default("system") // key into a safe web-font list
+  fontColor       String @default("#1A1A1A")
+  backgroundColor String @default("#FFFFFF")
+  themeVariant    String @default("classic") // "classic" | "bold"
+  cornerRadius    Int    @default(12)
+
+  // --- Display conditions ---
+  hideIfInCart Boolean @default(true) // hide if cart already has the upsell product
+
+  // --- Incentive / messaging ---
+  headlineEnabled      Boolean @default(true)
+  headlineText         String  @default("Wait! Add this to your order")
+  subheadlineEnabled   Boolean @default(true)
+  subheadlineText      String  @default("A special one-time offer, just for you.")
+  countdownEnabled     Boolean @default(false)
+  countdownMinutes     Int     @default(10)
+  timerBackgroundColor String  @default("#E4362F")
+
+  // --- Buy box (offered product) ---
+  productId             String?
+  variantId             String?
+  productTitle          String?
+  productImage          String?
+  productPrice          String?
+  productCompareAtPrice String?
+  imageFit              String  @default("cover") // "cover" | "contain"
+  imageSize             String  @default("medium") // "small" | "medium" | "large"
+  showCompareAt         Boolean @default(true)
+  showSavings           Boolean @default(true)
+
+  // --- Buttons ---
+  acceptButtonText    String @default("Add to my order")
+  acceptButtonColor   String @default("#1A1A1A")
+  declineButtonText   String @default("No thanks")
+  declineButtonColor  String @default("#6D7175")
+  closeButtonBehavior String @default("decline") // "decline" | "close"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

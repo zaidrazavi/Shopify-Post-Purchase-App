@@ -1,0 +1,38 @@
+-- CreateTable
+CREATE TABLE "PrePurchasePopupConfig" (
+    "shop" TEXT NOT NULL,
+    "enabled" BOOLEAN NOT NULL DEFAULT false,
+    "fontFamily" TEXT NOT NULL DEFAULT 'system',
+    "fontColor" TEXT NOT NULL DEFAULT '#1A1A1A',
+    "backgroundColor" TEXT NOT NULL DEFAULT '#FFFFFF',
+    "themeVariant" TEXT NOT NULL DEFAULT 'classic',
+    "cornerRadius" INTEGER NOT NULL DEFAULT 12,
+    "hideIfInCart" BOOLEAN NOT NULL DEFAULT true,
+    "headlineEnabled" BOOLEAN NOT NULL DEFAULT true,
+    "headlineText" TEXT NOT NULL DEFAULT 'Wait! Add this to your order',
+    "subheadlineEnabled" BOOLEAN NOT NULL DEFAULT true,
+    "subheadlineText" TEXT NOT NULL DEFAULT 'A special one-time offer, just for you.',
+    "countdownEnabled" BOOLEAN NOT NULL DEFAULT false,
+    "countdownMinutes" INTEGER NOT NULL DEFAULT 10,
+    "timerBackgroundColor" TEXT NOT NULL DEFAULT '#E4362F',
+    "productId" TEXT,
+    "variantId" TEXT,
+    "productTitle" TEXT,
+    "productImage" TEXT,
+    "productPrice" TEXT,
+    "productCompareAtPrice" TEXT,
+    "imageFit" TEXT NOT NULL DEFAULT 'cover',
+    "imageSize" TEXT NOT NULL DEFAULT 'medium',
+    "showCompareAt" BOOLEAN NOT NULL DEFAULT true,
+    "showSavings" BOOLEAN NOT NULL DEFAULT true,
+    "acceptButtonText" TEXT NOT NULL DEFAULT 'Add to my order',
+    "acceptButtonColor" TEXT NOT NULL DEFAULT '#1A1A1A',
+    "declineButtonText" TEXT NOT NULL DEFAULT 'No thanks',
+    "declineButtonColor" TEXT NOT NULL DEFAULT '#6D7175',
+    "closeButtonBehavior" TEXT NOT NULL DEFAULT 'decline',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "PrePurchasePopupConfig_pkey" PRIMARY KEY ("shop")
+);
+

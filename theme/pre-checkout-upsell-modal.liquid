@@ -1,0 +1,61 @@
+{%- comment -%}
+  Pre-purchase upsell popup — snippet.
+
+  UPDATED to be driven by the app's admin editor instead of hardcoded values.
+  Render this once near the end of your cart template / cart drawer, e.g.:
+
+      {% render 'pre-checkout-upsell-modal' %}
+
+  It outputs:
+    - a small JSON bootstrap (shop domain + app URL) the script reads,
+    - an empty modal shell the script fills in and styles from the config
+      served by /api/pre-purchase-popup.
+
+  Then include the script (in assets/) once:
+
+      <script src="{{ 'pre-checkout-upsell.js' | asset_url }}" defer></script>
+{%- endcomment -%}
+
+<script type="application/json" id="pre-checkout-upsell-bootstrap">
+  {
+    "shop": {{ shop.permanent_domain | json }},
+    "appUrl": "https://shopify-post-purchase-app.onrender.com"
+  }
+</script>
+
+<div
+  id="pre-checkout-upsell"
+  class="pcu-overlay"
+  role="dialog"
+  aria-modal="true"
+  aria-hidden="true"
+  hidden
+>
+  <div class="pcu-modal" data-pcu-modal>
+    <button type="button" class="pcu-close" data-pcu-close aria-label="Close">×</button>
+
+    <div class="pcu-timer" data-pcu-timer hidden></div>
+
+    <div class="pcu-body">
+      <div class="pcu-headline" data-pcu-headline hidden></div>
+      <div class="pcu-subheadline" data-pcu-subheadline hidden></div>
+
+      <div class="pcu-buybox">
+        <img class="pcu-image" data-pcu-image alt="" hidden />
+        <div class="pcu-details">
+          <div class="pcu-title" data-pcu-title></div>
+          <div class="pcu-prices">
+            <span class="pcu-compare" data-pcu-compare hidden></span>
+            <span class="pcu-price" data-pcu-price></span>
+          </div>
+          <div class="pcu-savings" data-pcu-savings hidden></div>
+        </div>
+      </div>
+
+      <div class="pcu-actions">
+        <button type="button" class="pcu-accept" data-pcu-accept></button>
+        <button type="button" class="pcu-decline" data-pcu-decline></button>
+      </div>
+    </div>
+  </div>
+</div>
