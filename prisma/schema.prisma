@@ -87,10 +87,10 @@ model PrePurchasePopupConfig {
 
   // --- General (look & feel) ---
   fontFamily      String @default("system") // key into a safe web-font list
-  fontColor       String @default("#1A1A1A")
+  fontColor       String @default("#1A1A2E")
   backgroundColor String @default("#FFFFFF")
   themeVariant    String @default("classic") // "classic" | "bold"
-  cornerRadius    Int    @default(12)
+  cornerRadius    Int    @default(14)
 
   // --- Display conditions ---
   hideIfInCart Boolean @default(true) // hide if cart already has the upsell product
@@ -100,9 +100,11 @@ model PrePurchasePopupConfig {
   headlineText         String  @default("Wait! Add this to your order")
   subheadlineEnabled   Boolean @default(true)
   subheadlineText      String  @default("A special one-time offer, just for you.")
-  countdownEnabled     Boolean @default(false)
+  descriptionEnabled   Boolean @default(true)
+  descriptionText      String  @default("This limited-time add-on is the perfect finishing touch for your order — grab it now before you check out.")
+  countdownEnabled     Boolean @default(true)
   countdownMinutes     Int     @default(10)
-  timerBackgroundColor String  @default("#E4362F")
+  timerBackgroundColor String  @default("#F8C9C9")
 
   // --- Buy box (offered product) ---
   productId             String?
@@ -118,7 +120,7 @@ model PrePurchasePopupConfig {
 
   // --- Buttons ---
   acceptButtonText    String @default("Add to my order")
-  acceptButtonColor   String @default("#1A1A1A")
+  acceptButtonColor   String @default("#EF6E7B")
   declineButtonText   String @default("No thanks")
   declineButtonColor  String @default("#6D7175")
   closeButtonBehavior String @default("decline") // "decline" | "close"

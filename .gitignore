@@ -17,6 +17,9 @@ database.sqlite
 .env.*
 !.env.example
 
+# Scratch theme pulls (shopify theme pull) — not part of the app repo
+/_theme-*/
+
 
 
 

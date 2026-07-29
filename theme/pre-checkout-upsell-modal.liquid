@@ -1,61 +1,384 @@
-{%- comment -%}
-  Pre-purchase upsell popup — snippet.
+{% comment %}
+  Pre-checkout upsell modal
+  -------------------------
+  Shown the first time a shopper clicks a checkout button (`#checkout` on the cart page
+  or `#CartDrawer-Checkout` in the cart drawer). Interception + countdown logic lives in
+  `assets/pre-checkout-upsell.js`.
 
-  UPDATED to be driven by the app's admin editor instead of hardcoded values.
-  Render this once near the end of your cart template / cart drawer, e.g.:
-
-      {% render 'pre-checkout-upsell-modal' %}
-
-  It outputs:
-    - a small JSON bootstrap (shop domain + app URL) the script reads,
-    - an empty modal shell the script fills in and styles from the config
-      served by /api/pre-purchase-popup.
-
-  Then include the script (in assets/) once:
-
-      <script src="{{ 'pre-checkout-upsell.js' | asset_url }}" defer></script>
-{%- endcomment -%}
-
-<script type="application/json" id="pre-checkout-upsell-bootstrap">
-  {
-    "shop": {{ shop.permanent_domain | json }},
-    "appUrl": "https://shopify-post-purchase-app.onrender.com"
-  }
-</script>
+  CONFIG-DRIVEN: the shell renders on every page (hidden). The script fetches the
+  merchant's settings from the Drims app (/api/pre-purchase-popup?shop=...) and fills
+  in the product, copy, colors, timer and buttons. If the popup is disabled, no product
+  is configured, or the product is already in the cart, the script never intercepts and
+  checkout proceeds normally.
+{% endcomment %}
 
 <div
-  id="pre-checkout-upsell"
-  class="pcu-overlay"
-  role="dialog"
-  aria-modal="true"
-  aria-hidden="true"
+  id="PreCheckoutUpsell"
+  class="pcu-modal"
+  data-shop="{{ shop.permanent_domain }}"
+  data-app-url="https://shopify-post-purchase-app.onrender.com"
+  data-variant-id=""
+  data-timer-seconds="600"
   hidden
 >
-  <div class="pcu-modal" data-pcu-modal>
-    <button type="button" class="pcu-close" data-pcu-close aria-label="Close">×</button>
+  <div class="pcu-modal__overlay" data-pcu-dismiss></div>
 
-    <div class="pcu-timer" data-pcu-timer hidden></div>
+  <div class="pcu-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="PreCheckoutUpsell-Heading">
+    <button
+      type="button"
+      class="pcu-modal__close"
+      data-pcu-close
+      aria-label="{{ 'accessibility.close' | t | default: 'Close' }}"
+    >
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+        <line x1="5" y1="5" x2="19" y2="19"></line>
+        <line x1="19" y1="5" x2="5" y2="19"></line>
+      </svg>
+    </button>
 
-    <div class="pcu-body">
-      <div class="pcu-headline" data-pcu-headline hidden></div>
-      <div class="pcu-subheadline" data-pcu-subheadline hidden></div>
+    <div class="pcu-modal__head">
+      <h2 id="PreCheckoutUpsell-Heading" class="pcu-modal__title" data-pcu-headline></h2>
+      <p class="pcu-modal__sub" data-pcu-sub></p>
+    </div>
 
-      <div class="pcu-buybox">
-        <img class="pcu-image" data-pcu-image alt="" hidden />
-        <div class="pcu-details">
-          <div class="pcu-title" data-pcu-title></div>
-          <div class="pcu-prices">
-            <span class="pcu-compare" data-pcu-compare hidden></span>
-            <span class="pcu-price" data-pcu-price></span>
-          </div>
-          <div class="pcu-savings" data-pcu-savings hidden></div>
-        </div>
+    <div class="pcu-modal__timerbar" data-pcu-timerbar>
+      Special Offer Ends In: <span class="pcu-modal__timer" data-pcu-timer>10:00</span>
+    </div>
+
+    <div class="pcu-modal__body">
+      <div class="pcu-modal__media" data-pcu-media>
+        <img data-pcu-image src="" alt="" loading="lazy">
       </div>
 
-      <div class="pcu-actions">
-        <button type="button" class="pcu-accept" data-pcu-accept></button>
-        <button type="button" class="pcu-decline" data-pcu-decline></button>
+      <div class="pcu-modal__info">
+        <h3 class="pcu-modal__product-title" data-pcu-title></h3>
+
+        <div class="pcu-modal__desc" data-pcu-desc hidden></div>
+
+        <div class="pcu-modal__price-row">
+          <s class="pcu-modal__compare" data-pcu-compare hidden></s>
+          <span class="pcu-modal__amount" data-pcu-amount></span>
+          <span class="pcu-modal__savings" data-pcu-savings hidden></span>
+        </div>
+
+        <button type="button" class="pcu-modal__add" data-pcu-add>
+          <span class="pcu-modal__add-label" data-pcu-add-label>Add This Gift To My Order</span>
+          <span class="pcu-modal__spinner" aria-hidden="true"></span>
+        </button>
+
+        <button type="button" class="pcu-modal__decline" data-pcu-decline>
+          I&rsquo;d rather pay full price
+        </button>
       </div>
     </div>
   </div>
 </div>
+
+{%- style -%}
+  .pcu-modal[hidden] { display: none; }
+
+  .pcu-modal {
+    position: fixed;
+    inset: 0;
+    /* Above the cart drawer (.drawer is z-index: 1000). */
+    z-index: 10000;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    /* Scroll the whole overlay when the dialog is taller than the viewport. */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 1.5rem;
+    font-family: var(--font-body-family);
+  }
+
+  .pcu-modal__overlay {
+    /* fixed so it keeps covering the viewport while the dialog scrolls */
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .pcu-modal__dialog {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 64rem;
+    /* centres vertically when it fits, and stays reachable/scrollable when it doesn't */
+    margin: auto;
+    box-sizing: border-box;
+    background: #ffffff;
+    color: #1a1a2e;
+    border-radius: 0.8rem;
+    overflow: hidden;
+    box-shadow: 0 2rem 5rem rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    transform: translateY(1.5rem) scale(0.98);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  .pcu-modal--active .pcu-modal__overlay { opacity: 1; }
+  .pcu-modal--active .pcu-modal__dialog { opacity: 1; transform: translateY(0) scale(1); }
+
+  .pcu-modal__close {
+    position: absolute;
+    top: 1.4rem;
+    right: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    padding: 0;
+    background: #ffffff;
+    color: #3b7dd8;
+    border: 0.15rem solid #3b7dd8;
+    border-radius: 0.4rem;
+    cursor: pointer;
+    z-index: 2;
+  }
+
+  .pcu-modal__head {
+    padding: 2.4rem 5rem 1.6rem;
+    text-align: center;
+  }
+
+  .pcu-modal__title {
+    margin: 0 0 0.8rem;
+    font-size: 2.5rem;
+    line-height: 1.2;
+    font-weight: 800;
+    color: inherit;
+    letter-spacing: 0;
+  }
+
+  .pcu-modal__title[hidden] { display: none; }
+
+  .pcu-modal__sub {
+    margin: 0;
+    font-size: 1.5rem;
+    line-height: 1.4;
+    color: inherit;
+    opacity: 0.85;
+  }
+
+  .pcu-modal__sub[hidden] { display: none; }
+
+  .pcu-modal__timerbar {
+    background: #f8c9c9;
+    color: #1a1a2e;
+    text-align: center;
+    font-size: 1.7rem;
+    font-weight: 600;
+    padding: 1rem 1.5rem;
+  }
+
+  .pcu-modal__timerbar[hidden] { display: none; }
+
+  .pcu-modal__timer {
+    color: #e14e2a;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pcu-modal__body {
+    display: flex;
+    align-items: stretch;
+    gap: 2.4rem;
+    padding: 2.4rem;
+  }
+
+  .pcu-modal__media {
+    flex: 0 0 44%;
+    align-self: flex-start;
+    border-radius: 0.4rem;
+    overflow: hidden;
+  }
+
+  .pcu-modal__media[hidden] { display: none; }
+
+  .pcu-modal__media img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .pcu-modal__info {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .pcu-modal__product-title {
+    margin: 0 0 1rem;
+    font-size: 2rem;
+    line-height: 1.25;
+    font-weight: 800;
+    color: inherit;
+  }
+
+  .pcu-modal__desc {
+    font-size: 1.4rem;
+    line-height: 1.5;
+    color: inherit;
+    opacity: 0.75;
+    max-height: 11rem;
+    overflow-y: auto;
+    margin-bottom: 1.4rem;
+    padding-right: 0.8rem;
+  }
+
+  .pcu-modal__desc[hidden] { display: none; }
+
+  .pcu-modal__desc::-webkit-scrollbar { width: 0.6rem; }
+  .pcu-modal__desc::-webkit-scrollbar-thumb { background: #cccccc; border-radius: 1rem; }
+
+  .pcu-modal__price-row {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.8rem 1rem;
+    margin-bottom: 1.6rem;
+  }
+
+  .pcu-modal__compare {
+    font-size: 1.6rem;
+    color: #8a8a8a;
+  }
+
+  .pcu-modal__compare[hidden] { display: none; }
+
+  .pcu-modal__amount {
+    font-size: 2rem;
+    font-weight: 800;
+    color: inherit;
+  }
+
+  .pcu-modal__savings {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #2e9e2e;
+  }
+
+  .pcu-modal__savings[hidden] { display: none; }
+
+  .pcu-modal__add {
+    position: relative;
+    width: 100%;
+    margin: 0 0 1.2rem;
+    padding: 1.4rem 1.6rem;
+    background: #ef6e7b;
+    color: #ffffff;
+    font-size: 1.6rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+  }
+
+  .pcu-modal__add:hover { filter: brightness(0.94); }
+
+  .pcu-modal__spinner {
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1.8rem;
+    height: 1.8rem;
+    margin: -0.9rem 0 0 -0.9rem;
+    border: 0.2rem solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: pcu-spin 0.7s linear infinite;
+  }
+
+  .pcu-modal__add.loading .pcu-modal__add-label { visibility: hidden; }
+  .pcu-modal__add.loading .pcu-modal__spinner { display: block; }
+
+  .pcu-modal__decline {
+    width: 100%;
+    padding: 1.3rem 1.6rem;
+    background: #ffffff;
+    color: #333333;
+    font-size: 1.5rem;
+    font-weight: 500;
+    border: 0.1rem solid #cccccc;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .pcu-modal__decline:hover { background: #f5f5f5; }
+
+  @keyframes pcu-spin { to { transform: rotate(360deg); } }
+
+  @media screen and (max-width: 600px) {
+    .pcu-modal {
+      padding: 1rem;
+      align-items: flex-start;
+    }
+
+    .pcu-modal__dialog {
+      max-width: 100%;
+    }
+
+    .pcu-modal__close {
+      top: 1rem;
+      right: 1rem;
+      width: 2.8rem;
+      height: 2.8rem;
+    }
+
+    .pcu-modal__head {
+      /* extra top room so the centred title never sits under the close button */
+      padding: 3.4rem 1.6rem 1.2rem;
+    }
+
+    .pcu-modal__title {
+      font-size: 1.9rem;
+      overflow-wrap: break-word;
+    }
+
+    .pcu-modal__sub { font-size: 1.4rem; }
+
+    .pcu-modal__timerbar {
+      font-size: 1.5rem;
+      padding: 0.9rem 1.2rem;
+    }
+
+    .pcu-modal__body {
+      flex-direction: column;
+      gap: 1.4rem;
+      padding: 1.6rem;
+    }
+
+    .pcu-modal__media {
+      flex: 0 0 auto;
+      width: 100%;
+      max-width: 26rem;
+      margin: 0 auto;
+    }
+
+    .pcu-modal__product-title {
+      font-size: 1.8rem;
+      overflow-wrap: break-word;
+    }
+
+    .pcu-modal__price-row {
+      justify-content: flex-start;
+      margin-bottom: 1.4rem;
+    }
+
+    .pcu-modal__amount { font-size: 1.9rem; }
+
+    .pcu-modal__add,
+    .pcu-modal__decline {
+      min-height: 4.8rem;
+      font-size: 1.5rem;
+    }
+  }
+{%- endstyle -%}

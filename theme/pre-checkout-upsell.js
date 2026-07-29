@@ -1,64 +1,65 @@
-/**
- * Pre-purchase upsell popup — storefront script (assets/pre-checkout-upsell.js).
+/*
+ * Pre-checkout upsell (config-driven)
+ * -----------------------------------
+ * Intercepts EVERY click on either checkout button:
+ *   - `#checkout`            (cart page, in `main-cart-footer.liquid`)
+ *   - `#CartDrawer-Checkout` (cart drawer, in `cart-drawer.liquid`)
  *
- * UPDATED: instead of hardcoded values, this fetches the merchant's config from
- * the app (/api/pre-purchase-popup?shop=...) on load and renders the popup from
- * it. When the buyer clicks Checkout in the cart, if the popup is enabled (and
- * not suppressed by "hide if already in cart"), it's shown; Accept adds the
- * variant and proceeds to checkout, Decline/close proceeds without it.
+ * The offer is configured in the Drims app admin. On load this fetches
+ * /api/pre-purchase-popup?shop=... and, if the popup is enabled and points at a
+ * product (and that product isn't already in the cart when "hide if in cart" is
+ * on), populates the modal and enables interception. Otherwise it never
+ * intercepts and checkout proceeds normally.
  *
- * Reconcile the CHECKOUT_SELECTORS list with your theme's actual checkout
- * button(s) if needed.
+ *   - "Add to order" -> POST /cart/add.js, then proceed to checkout.
+ *   - "No thanks"    -> proceed to checkout without adding.
+ *   - Close / overlay / Esc -> dismiss (X follows the configured close behavior).
  */
+/* global Shopify */
 (function () {
-  "use strict";
+  'use strict';
 
-  var CHECKOUT_SELECTORS = [
-    '[name="checkout"]',
-    'button[name="checkout"]',
-    '.cart__checkout',
-    '#checkout',
-    'a[href="/checkout"]',
-    'a[href^="/checkout"]',
-  ];
-  var IMAGE_SIZE_PX = { small: 96, medium: 140, large: 200 };
+  var CHECKOUT_BUTTON_IDS = ['checkout', 'CartDrawer-Checkout'];
 
-  var bootstrapEl = document.getElementById("pre-checkout-upsell-bootstrap");
-  var root = document.getElementById("pre-checkout-upsell");
-  if (!bootstrapEl || !root) return;
+  // Set only while we're deliberately submitting the checkout form (after the shopper
+  // chose "Add" or "No thanks"), so the delegated handler lets that submit through instead
+  // of re-opening the modal.
+  var proceeding = false;
 
-  var boot;
-  try {
-    boot = JSON.parse(bootstrapEl.textContent);
-  } catch (e) {
-    return;
+  function getForm(button) {
+    if (!button) return null;
+    return button.form || null;
   }
-  if (!boot || !boot.shop || !boot.appUrl) return;
 
-  var config = null; // populated by fetchConfig()
-  var proceeding = false; // guards our own checkout redirect
-  var countdownTimer = null;
+  // Continue to checkout using the button the shopper originally clicked, making
+  // sure the `name="checkout"` submitter value is included so Shopify redirects
+  // to the checkout instead of just refreshing the cart.
+  function proceedToCheckout(button) {
+    if (!button) return;
+    proceeding = true;
+    if (!button.isConnected && button.id) {
+      button = document.getElementById(button.id) || button;
+    }
+    var form = getForm(button);
 
-  var $ = function (sel) {
-    return root.querySelector(sel);
-  };
-
-  function fetchConfig() {
-    var url =
-      boot.appUrl +
-      "/api/pre-purchase-popup?shop=" +
-      encodeURIComponent(boot.shop);
-    return fetch(url, { method: "GET" })
-      .then(function (r) {
-        return r.ok ? r.json() : null;
-      })
-      .catch(function () {
-        return null;
-      });
+    if (form && typeof form.requestSubmit === 'function') {
+      form.requestSubmit(button);
+      return;
+    }
+    if (form) {
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = button.getAttribute('name') || 'checkout';
+      hidden.value = button.value || '';
+      form.appendChild(hidden);
+      form.submit();
+      return;
+    }
+    button.click();
   }
 
   function getCart() {
-    return fetch("/cart.js", { headers: { Accept: "application/json" } })
+    return fetch('/cart.js', { headers: { Accept: 'application/json' } })
       .then(function (r) {
         return r.ok ? r.json() : { items: [] };
       })
@@ -73,68 +74,21 @@
     });
   }
 
-  // ----- Rendering -----
-
-  function applyConfig(cfg) {
-    var modal = $("[data-pcu-modal]");
-    var s = cfg.style || {};
-    modal.style.background = s.backgroundColor || "#fff";
-    modal.style.color = s.fontColor || "#1a1a1a";
-    modal.style.fontFamily = s.fontFamily || "sans-serif";
-    modal.style.borderRadius = (s.cornerRadius || 12) + "px";
-    modal.setAttribute("data-variant", s.themeVariant || "classic");
-
-    // Timer
-    var timerEl = $("[data-pcu-timer]");
-    if (cfg.countdown) {
-      timerEl.style.background = cfg.countdown.backgroundColor || "#e4362f";
-      timerEl.hidden = false;
-      startCountdown(cfg.countdown.minutes || 10, timerEl);
-    } else {
-      timerEl.hidden = true;
+  function formatMoney(value) {
+    if (value == null || value === '') return '';
+    var n = parseFloat(value);
+    if (isNaN(n)) return String(value);
+    if (window.Shopify && typeof Shopify.formatMoney === 'function' && Shopify.money_format) {
+      try {
+        return Shopify.formatMoney(Math.round(n * 100), Shopify.money_format);
+      } catch (e) {
+        /* fall through */
+      }
     }
-
-    // Text
-    toggleText($("[data-pcu-headline]"), cfg.headline);
-    toggleText($("[data-pcu-subheadline]"), cfg.subheadline);
-
-    // Product
-    var p = cfg.product || {};
-    var img = $("[data-pcu-image]");
-    if (p.image) {
-      var px = IMAGE_SIZE_PX[p.imageSize] || 140;
-      img.src = p.image;
-      img.alt = p.title || "";
-      img.style.width = px + "px";
-      img.style.height = px + "px";
-      img.style.objectFit = p.imageFit === "contain" ? "contain" : "cover";
-      img.hidden = false;
-    } else {
-      img.hidden = true;
-    }
-    $("[data-pcu-title]").textContent = p.title || "";
-    $("[data-pcu-price]").textContent = p.price ? formatMoney(p.price) : "";
-    toggleText(
-      $("[data-pcu-compare]"),
-      p.compareAtPrice ? formatMoney(p.compareAtPrice) : null,
-    );
-    toggleText(
-      $("[data-pcu-savings]"),
-      p.savings ? "You save " + formatMoney(p.savings) : null,
-    );
-
-    // Buttons
-    var b = cfg.buttons || {};
-    var accept = $("[data-pcu-accept]");
-    var decline = $("[data-pcu-decline]");
-    accept.textContent = b.acceptText || "Add to my order";
-    accept.style.background = b.acceptColor || "#1a1a1a";
-    accept.style.color = "#fff";
-    decline.textContent = b.declineText || "No thanks";
-    decline.style.color = b.declineColor || "#6d7175";
+    return n.toFixed(2);
   }
 
-  function toggleText(el, text) {
+  function setTextOrHide(el, text) {
     if (!el) return;
     if (text) {
       el.textContent = text;
@@ -144,120 +98,296 @@
     }
   }
 
-  function formatMoney(amount) {
-    // The config stores plain decimal strings (e.g. "600.00"). If your theme
-    // has a money formatter, swap it in here.
-    var n = parseFloat(amount);
-    return isNaN(n) ? String(amount) : n.toFixed(2);
-  }
-
-  function startCountdown(minutes, el) {
-    if (countdownTimer) clearInterval(countdownTimer);
-    var remaining = Math.max(1, parseInt(minutes, 10) || 10) * 60;
-    var tick = function () {
-      var m = String(Math.floor(remaining / 60)).padStart(2, "0");
-      var sec = String(remaining % 60).padStart(2, "0");
-      el.textContent = "Offer ends in " + m + ":" + sec;
-      if (remaining > 0) remaining -= 1;
-    };
-    tick();
-    countdownTimer = setInterval(tick, 1000);
-  }
-
-  // ----- Open / close -----
-
-  function openPopup() {
-    root.hidden = false;
-    root.setAttribute("aria-hidden", "false");
-    document.body.style.overflow = "hidden";
-  }
-
-  function closePopup() {
-    root.hidden = true;
-    root.setAttribute("aria-hidden", "true");
-    document.body.style.overflow = "";
-    if (countdownTimer) clearInterval(countdownTimer);
-  }
-
-  function proceedToCheckout() {
-    proceeding = true;
-    window.location.href = "/checkout";
-  }
-
-  function acceptOffer() {
-    var variantId = config && config.product && config.product.variantId;
-    if (!variantId) {
-      proceedToCheckout();
-      return;
+  // Pick black or white text for readability on a given background color.
+  function contrastText(hex) {
+    var c = String(hex || '').replace('#', '');
+    if (c.length === 3) {
+      c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
     }
-    fetch("/cart/add.js", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ items: [{ id: variantId, quantity: 1 }] }),
-    })
-      .then(function () {
-        proceedToCheckout();
-      })
-      .catch(function () {
-        proceedToCheckout();
-      });
-  }
-
-  // ----- Wiring -----
-
-  function onCheckoutClick(event) {
-    if (proceeding || !config || !config.enabled) return; // let it through
-    var target = event.target.closest(CHECKOUT_SELECTORS.join(","));
-    if (!target) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    var showAfterCartCheck = function (cart) {
-      var variantId = config.product && config.product.variantId;
-      if (
-        config.display &&
-        config.display.hideIfInCart &&
-        variantId &&
-        cartHasVariant(cart, variantId)
-      ) {
-        proceedToCheckout();
-        return;
-      }
-      applyConfig(config);
-      openPopup();
-    };
-
-    getCart().then(showAfterCartCheck);
-  }
-
-  function bindModalEvents() {
-    $("[data-pcu-accept]").addEventListener("click", acceptOffer);
-    $("[data-pcu-decline]").addEventListener("click", proceedToCheckout);
-    $("[data-pcu-close]").addEventListener("click", function () {
-      var behavior = config && config.buttons && config.buttons.closeBehavior;
-      if (behavior === "close") {
-        closePopup();
-      } else {
-        proceedToCheckout();
-      }
-    });
-    root.addEventListener("click", function (e) {
-      if (e.target === root) proceedToCheckout(); // click on overlay backdrop
-    });
+    if (c.length !== 6) return '#ffffff';
+    var r = parseInt(c.slice(0, 2), 16);
+    var g = parseInt(c.slice(2, 4), 16);
+    var b = parseInt(c.slice(4, 6), 16);
+    var lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return lum > 0.62 ? '#1A1A2E' : '#ffffff';
   }
 
   function init() {
-    bindModalEvents();
-    // Capture-phase so we intercept before the theme's own checkout handler.
-    document.addEventListener("click", onCheckoutClick, true);
-    fetchConfig().then(function (cfg) {
-      config = cfg;
+    var modal = document.getElementById('PreCheckoutUpsell');
+
+    var offerReady = false; // becomes true only once a valid, enabled offer is loaded
+    var closeBehavior = 'decline';
+    var pendingButton = null;
+    var closeTimer = null;
+    var countdownInterval = null;
+
+    function openModal(button) {
+      if (!modal) return;
+      pendingButton = button;
+      if (closeTimer) {
+        clearTimeout(closeTimer);
+        closeTimer = null;
+      }
+      modal.hidden = false;
+      void modal.offsetWidth; // reflow so the CSS transition runs
+      modal.classList.add('pcu-modal--active');
+      document.body.style.overflow = 'hidden';
+      startCountdown();
+      var focusTarget = modal.querySelector('[data-pcu-add]');
+      if (focusTarget) focusTarget.focus();
+    }
+
+    function closeModal() {
+      if (!modal) return;
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+      }
+      modal.classList.remove('pcu-modal--active');
+      document.body.style.overflow = '';
+      closeTimer = setTimeout(function () {
+        modal.hidden = true;
+      }, 250);
+    }
+
+    function startCountdown() {
+      var bar = modal.querySelector('[data-pcu-timerbar]');
+      if (bar && bar.hidden) return; // timer disabled in config
+      var el = modal.querySelector('[data-pcu-timer]');
+      if (!el) return;
+      var remaining = parseInt(modal.getAttribute('data-timer-seconds'), 10) || 600;
+      function render() {
+        var m = Math.floor(remaining / 60);
+        var s = remaining % 60;
+        el.textContent = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+      }
+      render();
+      if (countdownInterval) clearInterval(countdownInterval);
+      countdownInterval = setInterval(function () {
+        remaining -= 1;
+        if (remaining <= 0) {
+          remaining = 0;
+          render();
+          clearInterval(countdownInterval);
+          countdownInterval = null;
+          return;
+        }
+        render();
+      }, 1000);
+    }
+
+    // ----- Apply admin config to the modal DOM -----
+    function applyConfig(cfg) {
+      var st = cfg.style || {};
+      var dialog = modal.querySelector('.pcu-modal__dialog');
+      if (dialog) {
+        if (st.backgroundColor) dialog.style.background = st.backgroundColor;
+        if (st.fontColor) dialog.style.color = st.fontColor;
+        if (st.cornerRadius != null) dialog.style.borderRadius = st.cornerRadius + 'px';
+      }
+      if (st.fontFamily) modal.style.fontFamily = st.fontFamily;
+      var info = modal.querySelector('.pcu-modal__info');
+      if (info) info.style.textAlign = st.themeVariant === 'bold' ? 'center' : 'left';
+
+      setTextOrHide(modal.querySelector('[data-pcu-headline]'), cfg.headline);
+      setTextOrHide(modal.querySelector('[data-pcu-sub]'), cfg.subheadline);
+
+      var timerbar = modal.querySelector('[data-pcu-timerbar]');
+      if (cfg.countdown) {
+        if (timerbar) {
+          timerbar.hidden = false;
+          if (cfg.countdown.backgroundColor) timerbar.style.background = cfg.countdown.backgroundColor;
+        }
+        modal.setAttribute('data-timer-seconds', String((cfg.countdown.minutes || 10) * 60));
+      } else if (timerbar) {
+        timerbar.hidden = true;
+      }
+
+      var p = cfg.product || {};
+      if (p.variantId) modal.setAttribute('data-variant-id', String(p.variantId));
+
+      var media = modal.querySelector('[data-pcu-media]');
+      var img = modal.querySelector('[data-pcu-image]');
+      if (p.image && img) {
+        img.src = p.image;
+        img.alt = p.title || '';
+        img.style.objectFit = p.imageFit === 'contain' ? 'contain' : 'cover';
+        if (p.imageFit === 'cover') img.style.height = '100%';
+        if (media) {
+          media.hidden = false;
+          var basis = p.imageSize === 'small' ? '32%' : p.imageSize === 'large' ? '56%' : '44%';
+          media.style.flex = '0 0 ' + basis;
+        }
+      } else if (media) {
+        media.hidden = true;
+      }
+
+      var titleEl = modal.querySelector('[data-pcu-title]');
+      if (titleEl) titleEl.textContent = p.title || '';
+      setTextOrHide(modal.querySelector('[data-pcu-desc]'), cfg.description);
+      setTextOrHide(
+        modal.querySelector('[data-pcu-compare]'),
+        p.compareAtPrice ? formatMoney(p.compareAtPrice) : null
+      );
+      var amountEl = modal.querySelector('[data-pcu-amount]');
+      if (amountEl) amountEl.textContent = p.price ? formatMoney(p.price) : '';
+      setTextOrHide(
+        modal.querySelector('[data-pcu-savings]'),
+        p.savings ? formatMoney(p.savings) + ' Savings' : null
+      );
+
+      var b = cfg.buttons || {};
+      var addLabel = modal.querySelector('[data-pcu-add-label]');
+      if (addLabel && b.acceptText) addLabel.textContent = b.acceptText;
+      var addBtn = modal.querySelector('[data-pcu-add]');
+      if (addBtn && b.acceptColor) {
+        addBtn.style.background = b.acceptColor;
+        addBtn.style.color = contrastText(b.acceptColor);
+      }
+      var declineBtn = modal.querySelector('[data-pcu-decline]');
+      if (declineBtn) {
+        if (b.declineText) declineBtn.textContent = b.declineText;
+        if (b.declineColor) declineBtn.style.color = b.declineColor;
+      }
+      closeBehavior = b.closeBehavior === 'close' ? 'close' : 'decline';
+    }
+
+    // ----- Load config, decide whether to arm the popup -----
+    function loadConfig() {
+      var shop = modal && modal.getAttribute('data-shop');
+      var appUrl = modal && modal.getAttribute('data-app-url');
+      if (!shop || !appUrl) return;
+
+      fetch(appUrl + '/api/pre-purchase-popup?shop=' + encodeURIComponent(shop), {
+        method: 'GET'
+      })
+        .then(function (r) {
+          return r.ok ? r.json() : null;
+        })
+        .catch(function () {
+          return null;
+        })
+        .then(function (cfg) {
+          if (!cfg || !cfg.enabled || !cfg.product || !cfg.product.variantId) {
+            offerReady = false; // nothing to show — checkout proceeds normally
+            return;
+          }
+          if (cfg.display && cfg.display.hideIfInCart) {
+            getCart().then(function (cart) {
+              if (cartHasVariant(cart, cfg.product.variantId)) {
+                offerReady = false;
+              } else {
+                applyConfig(cfg);
+                offerReady = true;
+              }
+            });
+            return;
+          }
+          applyConfig(cfg);
+          offerReady = true;
+        });
+    }
+
+    var checkoutSelector = '#' + CHECKOUT_BUTTON_IDS.join(', #');
+
+    // Delegate on the document in the CAPTURE phase — survives Section-Rendering re-renders
+    // of the drawer/footer, and runs before the drawer button's inline onclick.
+    document.addEventListener(
+      'click',
+      function (event) {
+        if (proceeding) return; // submitting to checkout — don't re-open the modal
+        if (!modal || !offerReady) return; // no armed offer — let checkout proceed
+        var button = event.target.closest && event.target.closest(checkoutSelector);
+        if (!button || button.disabled) return;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        openModal(button);
+      },
+      true
+    );
+
+    if (!modal) return;
+
+    var addButton = modal.querySelector('[data-pcu-add]');
+    if (addButton) {
+      addButton.addEventListener('click', function () {
+        if (addButton.classList.contains('loading')) return;
+        var variantId = parseInt(modal.getAttribute('data-variant-id'), 10);
+        var button = pendingButton;
+
+        if (!variantId) {
+          closeModal();
+          proceedToCheckout(button);
+          return;
+        }
+
+        addButton.classList.add('loading');
+        var addUrl =
+          window.routes && window.routes.cart_add_url
+            ? window.routes.cart_add_url + '.js'
+            : '/cart/add.js';
+
+        fetch(addUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ items: [{ id: variantId, quantity: 1 }] })
+        })
+          .then(function (response) {
+            return response.json();
+          })
+          .catch(function (error) {
+            console.error('[pre-checkout-upsell] add to cart failed', error);
+          })
+          .then(function () {
+            addButton.classList.remove('loading');
+            closeModal();
+            proceedToCheckout(button);
+          });
+      });
+    }
+
+    modal.querySelectorAll('[data-pcu-decline]').forEach(function (el) {
+      el.addEventListener('click', function () {
+        var button = pendingButton;
+        closeModal();
+        proceedToCheckout(button);
+      });
     });
+
+    // Overlay = dismiss and stay on the cart.
+    modal.querySelectorAll('[data-pcu-dismiss]').forEach(function (el) {
+      el.addEventListener('click', closeModal);
+    });
+
+    // The X follows the configured close behavior.
+    var closeBtn = modal.querySelector('[data-pcu-close]');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function () {
+        if (closeBehavior === 'decline') {
+          var button = pendingButton;
+          closeModal();
+          proceedToCheckout(button);
+        } else {
+          closeModal();
+        }
+      });
+    }
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeModal();
+    });
+
+    loadConfig();
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+  // Reset the in-progress guard on every page show (critical for bfcache back-button).
+  window.addEventListener('pageshow', function () {
+    proceeding = false;
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }

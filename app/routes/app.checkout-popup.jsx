@@ -39,6 +39,8 @@ export const action = async ({ request }) => {
     headlineText: get("headlineText"),
     subheadlineEnabled: get("subheadlineEnabled") === "true",
     subheadlineText: get("subheadlineText"),
+    descriptionEnabled: get("descriptionEnabled") === "true",
+    descriptionText: get("descriptionText"),
     countdownEnabled: get("countdownEnabled") === "true",
     countdownMinutes: get("countdownMinutes"),
     timerBackgroundColor: get("timerBackgroundColor"),
@@ -108,6 +110,7 @@ const SWITCH_FIELDS = new Set([
   "hideIfInCart",
   "headlineEnabled",
   "subheadlineEnabled",
+  "descriptionEnabled",
   "countdownEnabled",
   "showCompareAt",
   "showSavings",
@@ -130,6 +133,8 @@ export default function CheckoutPopupEditor() {
     headlineText: config.headlineText ?? "",
     subheadlineEnabled: Boolean(config.subheadlineEnabled),
     subheadlineText: config.subheadlineText ?? "",
+    descriptionEnabled: Boolean(config.descriptionEnabled),
+    descriptionText: config.descriptionText ?? "",
     countdownEnabled: Boolean(config.countdownEnabled),
     countdownMinutes: config.countdownMinutes ?? 10,
     timerBackgroundColor: config.timerBackgroundColor || "#E4362F",
@@ -219,6 +224,8 @@ export default function CheckoutPopupEditor() {
         headlineText: form.headlineText,
         subheadlineEnabled: String(form.subheadlineEnabled),
         subheadlineText: form.subheadlineText,
+        descriptionEnabled: String(form.descriptionEnabled),
+        descriptionText: form.descriptionText,
         countdownEnabled: String(form.countdownEnabled),
         countdownMinutes: String(form.countdownMinutes ?? ""),
         timerBackgroundColor: form.timerBackgroundColor,
@@ -343,6 +350,18 @@ export default function CheckoutPopupEditor() {
           name="subheadlineText"
           label="Subheadline"
           defaultValue={config.subheadlineText}
+        />
+        <s-divider />
+        <s-switch
+          name="descriptionEnabled"
+          label="Show description"
+          defaultChecked={config.descriptionEnabled}
+        />
+        <s-text-area
+          name="descriptionText"
+          label="Description"
+          defaultValue={config.descriptionText}
+          rows="3"
         />
         <s-divider />
         <s-switch
@@ -473,6 +492,18 @@ function ProductPickerRow({ product, onPick }) {
   );
 }
 
+// Pick black or white text for readability on a given background color.
+function contrastText(hex) {
+  const c = String(hex || "").replace("#", "");
+  const full = c.length === 3 ? c.split("").map((x) => x + x).join("") : c;
+  if (full.length !== 6) return "#ffffff";
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.62 ? "#1A1A2E" : "#ffffff";
+}
+
 function PopupPreview({ form, product, device }) {
   const frameWidth =
     device === "mobile" ? 340 : device === "tablet" ? 480 : 620;
@@ -534,14 +565,15 @@ function PopupPreview({ form, product, device }) {
             <div
               style={{
                 background: form.timerBackgroundColor,
-                color: "#fff",
+                color: "#1A1A2E",
                 textAlign: "center",
                 padding: "8px",
                 fontWeight: 600,
                 fontSize: 14,
               }}
             >
-              Offer ends in {mins}:00
+              Special Offer Ends In:{" "}
+              <span style={{ color: "#E14E2A", fontWeight: 700 }}>{mins}:00</span>
             </div>
           ) : null}
 
@@ -606,6 +638,18 @@ function PopupPreview({ form, product, device }) {
                 <div style={{ fontWeight: 600, marginBottom: 6 }}>
                   {product?.title || "Select a product"}
                 </div>
+                {form.descriptionEnabled && form.descriptionText ? (
+                  <div
+                    style={{
+                      fontSize: 13,
+                      lineHeight: 1.4,
+                      opacity: 0.75,
+                      marginBottom: 10,
+                    }}
+                  >
+                    {form.descriptionText}
+                  </div>
+                ) : null}
                 <div
                   style={{
                     display: "flex",
@@ -652,7 +696,7 @@ function PopupPreview({ form, product, device }) {
               <div
                 style={{
                   background: form.acceptButtonColor,
-                  color: "#fff",
+                  color: contrastText(form.acceptButtonColor),
                   padding: "12px",
                   borderRadius: 8,
                   fontWeight: 600,
