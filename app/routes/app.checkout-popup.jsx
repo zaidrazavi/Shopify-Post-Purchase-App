@@ -645,6 +645,11 @@ function PopupPreview({ form, product, device }) {
                       lineHeight: 1.4,
                       opacity: 0.75,
                       marginBottom: 10,
+                      // Mirror the theme's .pcu-modal__desc: fixed-height scroll box,
+                      // not an expanding block.
+                      maxHeight: 72,
+                      overflowY: "auto",
+                      paddingRight: 6,
                     }}
                   >
                     {form.descriptionText}
