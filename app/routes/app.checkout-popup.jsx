@@ -445,7 +445,7 @@ export default function CheckoutPopupEditor() {
       <s-section slot="aside" heading="Live preview">
         <s-stack direction="block" gap="base">
           <s-button-group>
-            {["desktop", "tablet", "mobile"].map((d) => (
+            {["desktop", "mobile"].map((d) => (
               <s-button
                 key={d}
                 variant={device === d ? "primary" : "secondary"}
@@ -505,9 +505,7 @@ function contrastText(hex) {
 }
 
 function PopupPreview({ form, product, device }) {
-  const frameWidth =
-    device === "mobile" ? 340 : device === "tablet" ? 480 : 620;
-  const popupMaxWidth = device === "mobile" ? 300 : 420;
+  const isMobile = device === "mobile";
   const font = FONT_STACKS[form.fontFamily] || FONT_STACKS.system;
   const pricing = previewPricing(product, form.showCompareAt, form.showSavings);
   const imgPx = IMAGE_SIZE_PX[form.imageSize] || 140;
@@ -524,13 +522,15 @@ function PopupPreview({ form, product, device }) {
         borderRadius: "8px",
         display: "flex",
         justifyContent: "center",
-        overflow: "auto",
+        overflowX: "auto",
       }}
     >
       <div
         style={{
-          width: frameWidth,
-          maxWidth: "100%",
+          // Mobile = fixed narrow phone width; desktop = fills the panel.
+          width: isMobile ? 340 : "100%",
+          maxWidth: isMobile ? 340 : 460,
+          flex: "0 0 auto",
           display: "flex",
           justifyContent: "center",
         }}
@@ -538,7 +538,6 @@ function PopupPreview({ form, product, device }) {
         <div
           style={{
             width: "100%",
-            maxWidth: popupMaxWidth,
             background: form.backgroundColor,
             color: form.fontColor,
             fontFamily: font,

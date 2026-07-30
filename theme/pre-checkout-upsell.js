@@ -58,6 +58,18 @@
     button.click();
   }
 
+  // Navigate straight to checkout. Used after an add-to-cart so a cart-form
+  // re-submit can't drop the item we just added; uses the current server-side
+  // cart, which already contains it.
+  function goToCheckout() {
+    proceeding = true;
+    var root =
+      (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) ||
+      '/';
+    if (root.charAt(root.length - 1) !== '/') root += '/';
+    window.location.href = root + 'checkout';
+  }
+
   function getCart() {
     return fetch('/cart.js', { headers: { Accept: 'application/json' } })
       .then(function (r) {
@@ -115,7 +127,13 @@
   function init() {
     var modal = document.getElementById('PreCheckoutUpsell');
 
-    var offerReady = false; // becomes true only once a valid, enabled offer is loaded
+    // 'loading' until the config resolves, then 'armed' (show the popup on a
+    // checkout click) or 'off' (no offer — let checkout proceed). A checkout
+    // click during 'loading' is HELD until we know which, so fast mobile taps on
+    // a not-yet-loaded config don't slip straight through to checkout.
+    var configStatus = 'loading';
+    var heldButton = null;
+    var releaseTimer = null;
     var closeBehavior = 'decline';
     var pendingButton = null;
     var closeTimer = null;
@@ -252,40 +270,79 @@
       closeBehavior = b.closeBehavior === 'close' ? 'close' : 'decline';
     }
 
+    // Resolve the loading state once. If a checkout click is being held, act on
+    // it now (open the popup, or let checkout proceed).
+    function resolveConfig(armed) {
+      if (configStatus !== 'loading') return; // already decided
+      configStatus = armed ? 'armed' : 'off';
+      if (releaseTimer) {
+        clearTimeout(releaseTimer);
+        releaseTimer = null;
+      }
+      if (heldButton) {
+        var b = heldButton;
+        heldButton = null;
+        if (armed) {
+          openModal(b);
+        } else {
+          proceedToCheckout(b);
+        }
+      }
+    }
+
+    // Hold a checkout click made while the config is still loading, with a safety
+    // timeout so the shopper is never trapped if the backend is slow.
+    function holdClick(button) {
+      heldButton = button;
+      if (releaseTimer) clearTimeout(releaseTimer);
+      releaseTimer = setTimeout(function () {
+        if (heldButton && configStatus === 'loading') {
+          var b = heldButton;
+          heldButton = null;
+          proceedToCheckout(b);
+        }
+      }, 3500);
+    }
+
     // ----- Load config, decide whether to arm the popup -----
     function loadConfig() {
       var shop = modal && modal.getAttribute('data-shop');
       var appUrl = modal && modal.getAttribute('data-app-url');
-      if (!shop || !appUrl) return;
+      if (!shop || !appUrl) {
+        resolveConfig(false);
+        return;
+      }
 
-      fetch(appUrl + '/api/pre-purchase-popup?shop=' + encodeURIComponent(shop), {
-        method: 'GET'
-      })
+      // Fetch config and cart in parallel so we're armed as soon as possible.
+      var configReq = fetch(
+        appUrl + '/api/pre-purchase-popup?shop=' + encodeURIComponent(shop),
+        { method: 'GET' }
+      )
         .then(function (r) {
           return r.ok ? r.json() : null;
         })
         .catch(function () {
           return null;
-        })
-        .then(function (cfg) {
-          if (!cfg || !cfg.enabled || !cfg.product || !cfg.product.variantId) {
-            offerReady = false; // nothing to show — checkout proceeds normally
-            return;
-          }
-          if (cfg.display && cfg.display.hideIfInCart) {
-            getCart().then(function (cart) {
-              if (cartHasVariant(cart, cfg.product.variantId)) {
-                offerReady = false;
-              } else {
-                applyConfig(cfg);
-                offerReady = true;
-              }
-            });
-            return;
-          }
-          applyConfig(cfg);
-          offerReady = true;
         });
+
+      Promise.all([configReq, getCart()]).then(function (results) {
+        var cfg = results[0];
+        var cart = results[1];
+        if (!cfg || !cfg.enabled || !cfg.product || !cfg.product.variantId) {
+          resolveConfig(false);
+          return;
+        }
+        if (
+          cfg.display &&
+          cfg.display.hideIfInCart &&
+          cartHasVariant(cart, cfg.product.variantId)
+        ) {
+          resolveConfig(false);
+          return;
+        }
+        applyConfig(cfg);
+        resolveConfig(true);
+      });
     }
 
     var checkoutSelector = '#' + CHECKOUT_BUTTON_IDS.join(', #');
@@ -296,13 +353,21 @@
       'click',
       function (event) {
         if (proceeding) return; // submitting to checkout — don't re-open the modal
-        if (!modal || !offerReady) return; // no armed offer — let checkout proceed
+        if (!modal || configStatus === 'off') return; // no offer — let checkout proceed
         var button = event.target.closest && event.target.closest(checkoutSelector);
         if (!button || button.disabled) return;
 
+        // Armed OR still loading: intercept so the click can't slip through to
+        // checkout. If still loading (common on mobile / a cold backend), hold
+        // the button and act once the config resolves or the timeout fires.
         event.preventDefault();
         event.stopImmediatePropagation();
-        openModal(button);
+
+        if (configStatus === 'armed') {
+          openModal(button);
+        } else {
+          holdClick(button); // still loading — hold until config resolves
+        }
       },
       true
     );
@@ -328,18 +393,35 @@
             ? window.routes.cart_add_url + '.js'
             : '/cart/add.js';
 
+        // Add the upsell, THEN go straight to checkout. We must not re-submit the
+        // cart form here: on this theme that re-render drops the just-added line
+        // before checkout. A direct /checkout navigation uses the current
+        // server-side cart, which now includes the item.
         fetch(addUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ items: [{ id: variantId, quantity: 1 }] })
         })
           .then(function (response) {
+            if (!response.ok) {
+              return response.text().then(function (body) {
+                throw new Error(
+                  'add-to-cart failed (' + response.status + '): ' + body
+                );
+              });
+            }
             return response.json();
           })
-          .catch(function (error) {
-            console.error('[pre-checkout-upsell] add to cart failed', error);
-          })
           .then(function () {
+            // Item is now in the cart — proceed to checkout with it.
+            addButton.classList.remove('loading');
+            closeModal();
+            goToCheckout();
+          })
+          .catch(function (error) {
+            // Don't trap the shopper: log the reason and still continue.
+            // eslint-disable-next-line no-console
+            console.error('[pre-checkout-upsell]', error && error.message ? error.message : error);
             addButton.classList.remove('loading');
             closeModal();
             proceedToCheckout(button);
