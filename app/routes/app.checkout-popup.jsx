@@ -444,17 +444,17 @@ export default function CheckoutPopupEditor() {
       {/* Live preview */}
       <s-section slot="aside" heading="Live preview">
         <s-stack direction="block" gap="base">
-          <s-button-group>
+          <s-stack direction="inline" gap="tight">
             {["desktop", "mobile"].map((d) => (
               <s-button
                 key={d}
-                variant={device === d ? "primary" : "secondary"}
+                variant={device === d ? "primary" : "tertiary"}
                 onClick={() => setDevice(d)}
               >
-                {d.charAt(0).toUpperCase() + d.slice(1)}
+                {d === "desktop" ? "Desktop" : "Mobile"}
               </s-button>
             ))}
-          </s-button-group>
+          </s-stack>
           <PopupPreview form={form} product={product} device={device} />
         </s-stack>
       </s-section>
@@ -506,6 +506,9 @@ function contrastText(hex) {
 
 function PopupPreview({ form, product, device }) {
   const isMobile = device === "mobile";
+  // Render the card at its real storefront pixel width, then zoom it down to fit
+  // the (narrow) preview panel — so proportions/layout match live, not squeezed.
+  const targetWidth = isMobile ? 360 : 600;
   const font = FONT_STACKS[form.fontFamily] || FONT_STACKS.system;
   const pricing = previewPricing(product, form.showCompareAt, form.showSavings);
   const imgPx = IMAGE_SIZE_PX[form.imageSize] || 140;
@@ -514,30 +517,39 @@ function PopupPreview({ form, product, device }) {
     Math.max(1, Number.parseInt(form.countdownMinutes, 10) || 10),
   ).padStart(2, "0");
 
+  const panelRef = useRef(null);
+  const [zoom, setZoom] = useState(isMobile ? 0.8 : 0.5);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return undefined;
+    const measure = () => {
+      const avail = panel.clientWidth;
+      if (avail > 0) setZoom(Math.min(1, avail / targetWidth));
+    };
+    measure();
+    const ro =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    if (ro) ro.observe(panel);
+    return () => {
+      if (ro) ro.disconnect();
+    };
+  }, [targetWidth]);
+
   return (
     <div
       style={{
         background: "#f6f6f7",
         padding: "16px",
         borderRadius: "8px",
-        display: "flex",
-        justifyContent: "center",
-        overflowX: "auto",
+        overflow: "hidden",
       }}
     >
-      <div
-        style={{
-          // Mobile = fixed narrow phone width; desktop = fills the panel.
-          width: isMobile ? 340 : "100%",
-          maxWidth: isMobile ? 340 : 460,
-          flex: "0 0 auto",
-          display: "flex",
-          justifyContent: "center",
-        }}
-      >
+      <div ref={panelRef} style={{ display: "flex", justifyContent: "center" }}>
         <div
           style={{
-            width: "100%",
+            width: targetWidth,
+            zoom,
             background: form.backgroundColor,
             color: form.fontColor,
             fontFamily: font,
