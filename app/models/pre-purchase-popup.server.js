@@ -11,7 +11,7 @@ import {
  * Read/write + shaping logic for the pre-purchase (cart/checkout-click) upsell
  * popup config. Completely separate from the post-purchase OfferConfig.
  *
- * Used by the admin editor (app.checkout-popup.jsx) and the public API route
+ * Used by the admin overview/editor (app.checkout-popup.*.jsx) and the public API route
  * (api.pre-purchase-popup.jsx) that the storefront theme script fetches.
  */
 

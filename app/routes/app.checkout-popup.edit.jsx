@@ -5,7 +5,7 @@
 // prop-types runtime checker, so disable that rule for this file.
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
-import { useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -116,10 +116,20 @@ const SWITCH_FIELDS = new Set([
   "showSavings",
 ]);
 
+// Preview device modes. `width` is the real storefront pixel width the card is
+// rendered at before being zoomed to fit the (narrower) preview panel — so
+// proportions match the live popup rather than being squeezed.
+const DEVICES = [
+  { id: "desktop", icon: "desktop", label: "Desktop", width: 600 },
+  { id: "tablet", icon: "tablet", label: "Tablet", width: 512 },
+  { id: "mobile", icon: "mobile", label: "Mobile", width: 360 },
+];
+
 export default function CheckoutPopupEditor() {
   const { config } = useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
+  const navigate = useNavigate();
 
   const [form, setForm] = useState(() => ({
     enabled: Boolean(config.enabled),
@@ -163,6 +173,19 @@ export default function CheckoutPopupEditor() {
   );
 
   const [device, setDevice] = useState("desktop");
+
+  // Which accordion sections are expanded. General starts open (like OCU);
+  // collapsing hides the body via `s-box display="none"` — it does NOT unmount,
+  // so the uncontrolled `defaultValue` inputs keep any unsaved edits.
+  const [open, setOpen] = useState({
+    general: true,
+    display: false,
+    incentive: false,
+    buybox: false,
+    buttons: false,
+  });
+  const toggle = (key) => setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+
   const pageRef = useRef(null);
   const saving = fetcher.state !== "idle";
 
@@ -249,10 +272,16 @@ export default function CheckoutPopupEditor() {
     );
   }
 
-  const isLive = form.enabled && Boolean(product?.variantId);
-
   return (
-    <s-page ref={pageRef} heading="Checkout popup">
+    <s-page ref={pageRef} inlineSize="large" heading="Edit checkout popup">
+      <s-button
+        slot="breadcrumb-actions"
+        variant="tertiary"
+        icon="arrow-left"
+        onClick={() => navigate("/app/checkout-popup")}
+      >
+        Overview
+      </s-button>
       <s-button
         slot="primary-action"
         onClick={save}
@@ -261,204 +290,283 @@ export default function CheckoutPopupEditor() {
         Save
       </s-button>
 
-      {/* Status */}
-      <s-section>
-        <s-stack direction="inline" gap="base" alignItems="center">
-          <s-badge
-            tone={isLive ? "success" : "neutral"}
-            icon={isLive ? "check-circle" : "disabled"}
-          >
-            {isLive ? "Popup is Live" : "Popup is Off"}
-          </s-badge>
-          <s-switch
-            name="enabled"
-            label="Enable pre-purchase popup"
-            defaultChecked={config.enabled}
-            details="Shows when the buyer clicks Checkout in the cart. When off, nothing is shown."
-          />
-        </s-stack>
-      </s-section>
-
-      {/* General */}
-      <s-section heading="General">
-        <s-badge tone="info" icon="paint-brush-flat">
-          Look &amp; feel
-        </s-badge>
-        <s-select name="fontFamily" label="Font family" value={form.fontFamily}>
-          {FONT_OPTIONS.map((f) => (
-            <s-option key={f.value} value={f.value}>
-              {f.label}
-            </s-option>
-          ))}
-        </s-select>
-        <s-color-field
-          name="fontColor"
-          label="Font color"
-          defaultValue={config.fontColor}
-        />
-        <s-color-field
-          name="backgroundColor"
-          label="Background color"
-          defaultValue={config.backgroundColor}
-        />
-        <s-select name="themeVariant" label="Theme style" value={form.themeVariant}>
-          <s-option value="classic">Classic (left-aligned)</s-option>
-          <s-option value="bold">Bold (centered)</s-option>
-        </s-select>
-        <s-number-field
-          name="cornerRadius"
-          label="Corner radius"
-          defaultValue={config.cornerRadius ?? 12}
-          min="0"
-          max="40"
-          suffix="px"
-        />
-      </s-section>
-
-      {/* Display */}
-      <s-section heading="Display">
-        <s-switch
-          name="hideIfInCart"
-          label="Hide if the cart already contains the upsell product"
-          defaultChecked={config.hideIfInCart}
-        />
-        <s-text type="small">
-          Trigger: shown when the buyer clicks Checkout in the cart. (Product-page
-          triggers are out of scope for now.)
-        </s-text>
-      </s-section>
-
-      {/* Messaging */}
-      <s-section heading="Messaging &amp; incentive">
-        <s-switch
-          name="headlineEnabled"
-          label="Show headline"
-          defaultChecked={config.headlineEnabled}
-        />
-        <s-text-field
-          name="headlineText"
-          label="Headline"
-          defaultValue={config.headlineText}
-        />
-        <s-divider />
-        <s-switch
-          name="subheadlineEnabled"
-          label="Show subheadline"
-          defaultChecked={config.subheadlineEnabled}
-        />
-        <s-text-field
-          name="subheadlineText"
-          label="Subheadline"
-          defaultValue={config.subheadlineText}
-        />
-        <s-divider />
-        <s-switch
-          name="descriptionEnabled"
-          label="Show description"
-          defaultChecked={config.descriptionEnabled}
-        />
-        <s-text-area
-          name="descriptionText"
-          label="Description"
-          defaultValue={config.descriptionText}
-          rows="3"
-        />
-        <s-divider />
-        <s-switch
-          name="countdownEnabled"
-          label="Show countdown timer"
-          defaultChecked={config.countdownEnabled}
-        />
-        <s-number-field
-          name="countdownMinutes"
-          label="Countdown length (minutes)"
-          defaultValue={config.countdownMinutes ?? 10}
-          min="1"
-        />
-        <s-color-field
-          name="timerBackgroundColor"
-          label="Timer background color"
-          defaultValue={config.timerBackgroundColor}
-        />
-      </s-section>
-
-      {/* Buy box */}
-      <s-section heading="Buy box">
-        <ProductPickerRow product={product} onPick={pickProduct} />
-        <s-divider />
-        <s-select name="imageSize" label="Image size" value={form.imageSize}>
-          <s-option value="small">Small</s-option>
-          <s-option value="medium">Medium</s-option>
-          <s-option value="large">Large</s-option>
-        </s-select>
-        <s-select name="imageFit" label="Image fit" value={form.imageFit}>
-          <s-option value="cover">Cover (fill &amp; crop)</s-option>
-          <s-option value="contain">Contain (fit whole image)</s-option>
-        </s-select>
-        <s-switch
-          name="showCompareAt"
-          label="Show compare-at (was) price"
-          defaultChecked={config.showCompareAt}
-        />
-        <s-switch
-          name="showSavings"
-          label="Show savings amount"
-          defaultChecked={config.showSavings}
-        />
-      </s-section>
-
-      {/* Buttons */}
-      <s-section heading="Buttons">
-        <s-text-field
-          name="acceptButtonText"
-          label="Accept button text"
-          defaultValue={config.acceptButtonText}
-        />
-        <s-color-field
-          name="acceptButtonColor"
-          label="Accept button color"
-          defaultValue={config.acceptButtonColor}
-        />
-        <s-divider />
-        <s-text-field
-          name="declineButtonText"
-          label="Decline button text"
-          defaultValue={config.declineButtonText}
-        />
-        <s-color-field
-          name="declineButtonColor"
-          label="Decline button color"
-          defaultValue={config.declineButtonColor}
-        />
-        <s-divider />
-        <s-select
-          name="closeButtonBehavior"
-          label="Close (X) button behavior"
-          value={form.closeButtonBehavior}
-        >
-          <s-option value="decline">Same as Decline (dismiss offer)</s-option>
-          <s-option value="close">Just close the popup</s-option>
-        </s-select>
-      </s-section>
-
-      {/* Live preview */}
-      <s-section slot="aside" heading="Live preview">
-        <s-stack direction="block" gap="base">
-          <s-stack direction="inline" gap="tight">
-            {["desktop", "mobile"].map((d) => (
-              <s-button
-                key={d}
-                variant={device === d ? "primary" : "tertiary"}
-                onClick={() => setDevice(d)}
+      {/* OCU-style two-pane editor: collapsible controls (left) + preview (right) */}
+      <s-grid
+        gridTemplateColumns="minmax(0, 340px) minmax(0, 1fr)"
+        gap="base"
+        alignItems="start"
+      >
+        {/* Left: collapsible control sections */}
+        <s-grid-item>
+          <s-stack direction="block" gap="base">
+            <CollapsibleCard
+              icon="paint-brush-flat"
+              title="General"
+              open={open.general}
+              onToggle={() => toggle("general")}
+            >
+              <s-select
+                name="fontFamily"
+                label="Font family"
+                value={form.fontFamily}
               >
-                {d === "desktop" ? "Desktop" : "Mobile"}
-              </s-button>
-            ))}
+                {FONT_OPTIONS.map((f) => (
+                  <s-option key={f.value} value={f.value}>
+                    {f.label}
+                  </s-option>
+                ))}
+              </s-select>
+              <s-color-field
+                name="fontColor"
+                label="Font color"
+                defaultValue={config.fontColor}
+              />
+              <s-color-field
+                name="backgroundColor"
+                label="Background color"
+                defaultValue={config.backgroundColor}
+              />
+              <s-select
+                name="themeVariant"
+                label="Theme style"
+                value={form.themeVariant}
+              >
+                <s-option value="classic">Classic (left-aligned)</s-option>
+                <s-option value="bold">Bold (centered)</s-option>
+              </s-select>
+              <s-number-field
+                name="cornerRadius"
+                label="Corner radius"
+                defaultValue={config.cornerRadius ?? 12}
+                min="0"
+                max="40"
+                suffix="px"
+              />
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="view"
+              title="Display"
+              open={open.display}
+              onToggle={() => toggle("display")}
+            >
+              <s-switch
+                name="hideIfInCart"
+                label="Hide if the cart already contains the upsell product"
+                defaultChecked={config.hideIfInCart}
+              />
+              <s-text type="strong">Trigger</s-text>
+              <s-paragraph>
+                Shown when the buyer clicks Checkout in the cart. (Product-page
+                triggers are out of scope for now.)
+              </s-paragraph>
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="discount"
+              title="Messaging & incentive"
+              open={open.incentive}
+              onToggle={() => toggle("incentive")}
+            >
+              <s-switch
+                name="headlineEnabled"
+                label="Show headline"
+                defaultChecked={config.headlineEnabled}
+              />
+              <s-text-field
+                name="headlineText"
+                label="Headline"
+                defaultValue={config.headlineText}
+              />
+              <s-divider />
+              <s-switch
+                name="subheadlineEnabled"
+                label="Show subheadline"
+                defaultChecked={config.subheadlineEnabled}
+              />
+              <s-text-field
+                name="subheadlineText"
+                label="Subheadline"
+                defaultValue={config.subheadlineText}
+              />
+              <s-divider />
+              <s-switch
+                name="descriptionEnabled"
+                label="Show description"
+                defaultChecked={config.descriptionEnabled}
+              />
+              <s-text-area
+                name="descriptionText"
+                label="Description"
+                defaultValue={config.descriptionText}
+                rows="3"
+              />
+              <s-divider />
+              <s-switch
+                name="countdownEnabled"
+                label="Show countdown timer"
+                defaultChecked={config.countdownEnabled}
+              />
+              <s-number-field
+                name="countdownMinutes"
+                label="Countdown length (minutes)"
+                defaultValue={config.countdownMinutes ?? 10}
+                min="1"
+              />
+              <s-color-field
+                name="timerBackgroundColor"
+                label="Timer background color"
+                defaultValue={config.timerBackgroundColor}
+              />
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="product"
+              title="Buy box"
+              open={open.buybox}
+              onToggle={() => toggle("buybox")}
+            >
+              <ProductPickerRow product={product} onPick={pickProduct} />
+              <s-divider />
+              <s-select
+                name="imageSize"
+                label="Image size"
+                value={form.imageSize}
+              >
+                <s-option value="small">Small</s-option>
+                <s-option value="medium">Medium</s-option>
+                <s-option value="large">Large</s-option>
+              </s-select>
+              <s-select name="imageFit" label="Image fit" value={form.imageFit}>
+                <s-option value="cover">Cover (fill &amp; crop)</s-option>
+                <s-option value="contain">Contain (fit whole image)</s-option>
+              </s-select>
+              <s-switch
+                name="showCompareAt"
+                label="Show compare-at (was) price"
+                defaultChecked={config.showCompareAt}
+              />
+              <s-switch
+                name="showSavings"
+                label="Show savings amount"
+                defaultChecked={config.showSavings}
+              />
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="button"
+              title="Buttons"
+              open={open.buttons}
+              onToggle={() => toggle("buttons")}
+            >
+              <s-text-field
+                name="acceptButtonText"
+                label="Accept button text"
+                defaultValue={config.acceptButtonText}
+              />
+              <s-color-field
+                name="acceptButtonColor"
+                label="Accept button color"
+                defaultValue={config.acceptButtonColor}
+              />
+              <s-divider />
+              <s-text-field
+                name="declineButtonText"
+                label="Decline button text"
+                defaultValue={config.declineButtonText}
+              />
+              <s-color-field
+                name="declineButtonColor"
+                label="Decline button color"
+                defaultValue={config.declineButtonColor}
+              />
+              <s-divider />
+              <s-select
+                name="closeButtonBehavior"
+                label="Close (X) button behavior"
+                value={form.closeButtonBehavior}
+              >
+                <s-option value="decline">
+                  Same as Decline (dismiss offer)
+                </s-option>
+                <s-option value="close">Just close the popup</s-option>
+              </s-select>
+            </CollapsibleCard>
           </s-stack>
-          <PopupPreview form={form} product={product} device={device} />
-        </s-stack>
-      </s-section>
+        </s-grid-item>
+
+        {/* Right: live preview with device top-bar */}
+        <s-grid-item>
+          <div style={{ position: "sticky", top: 0 }}>
+            <s-section heading="Live preview">
+              <s-stack direction="block" gap="base">
+                <s-stack
+                  direction="inline"
+                  gap="tight"
+                  alignItems="center"
+                  justifyContent="space-between"
+                >
+                  <s-text type="strong">
+                    {DEVICES.find((d) => d.id === device)?.label} preview
+                  </s-text>
+                  <s-stack direction="inline" gap="tight" alignItems="center">
+                    {DEVICES.map((d) => (
+                      <s-button
+                        key={d.id}
+                        icon={d.icon}
+                        accessibilityLabel={`${d.label} preview`}
+                        variant={device === d.id ? "primary" : "tertiary"}
+                        onClick={() => setDevice(d.id)}
+                      />
+                    ))}
+                  </s-stack>
+                </s-stack>
+                <PopupPreview form={form} product={product} device={device} />
+              </s-stack>
+            </s-section>
+          </div>
+        </s-grid-item>
+      </s-grid>
     </s-page>
+  );
+}
+
+// Accordion card: an s-section whose body is toggled with `s-box display`.
+// Uses a full-width s-clickable header (icon + title + chevron). The body is
+// hidden, not unmounted, so uncontrolled inputs keep their edited values.
+function CollapsibleCard({ icon, title, open, onToggle, children }) {
+  return (
+    <s-section padding="none">
+      <s-clickable
+        onClick={onToggle}
+        padding="base"
+        accessibilityLabel={`${open ? "Collapse" : "Expand"} ${title}`}
+        style={{ display: "block", width: "100%" }}
+      >
+        <s-stack
+          direction="inline"
+          gap="base"
+          alignItems="center"
+          justifyContent="space-between"
+        >
+          <s-stack direction="inline" gap="small" alignItems="center">
+            <s-icon type={icon} tone="neutral" />
+            <s-text type="strong">{title}</s-text>
+          </s-stack>
+          <s-icon type={open ? "chevron-up" : "chevron-down"} tone="neutral" />
+        </s-stack>
+      </s-clickable>
+      <s-box
+        display={open ? "auto" : "none"}
+        paddingInline="base"
+        paddingBlockEnd="base"
+      >
+        <s-stack direction="block" gap="base">
+          <s-divider />
+          {children}
+        </s-stack>
+      </s-box>
+    </s-section>
   );
 }
 
@@ -475,7 +583,7 @@ function ProductPickerRow({ product, onPick }) {
             <s-stack direction="inline" gap="tight">
               {product.price ? <s-text>{product.price}</s-text> : null}
               {product.compareAtPrice ? (
-                <s-text type="small">was {product.compareAtPrice}</s-text>
+                <s-text type="redundant">was {product.compareAtPrice}</s-text>
               ) : null}
             </s-stack>
           </s-stack>
@@ -505,10 +613,11 @@ function contrastText(hex) {
 }
 
 function PopupPreview({ form, product, device }) {
+  const dev = DEVICES.find((d) => d.id === device) || DEVICES[0];
   const isMobile = device === "mobile";
   // Render the card at its real storefront pixel width, then zoom it down to fit
   // the (narrow) preview panel — so proportions/layout match live, not squeezed.
-  const targetWidth = isMobile ? 360 : 600;
+  const targetWidth = dev.width;
   const font = FONT_STACKS[form.fontFamily] || FONT_STACKS.system;
   const pricing = previewPricing(product, form.showCompareAt, form.showSavings);
   const imgPx = IMAGE_SIZE_PX[form.imageSize] || 140;
