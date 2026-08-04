@@ -61,14 +61,16 @@
           <span class="pcu-modal__savings" data-pcu-savings hidden></span>
         </div>
 
-        <button type="button" class="pcu-modal__add" data-pcu-add>
-          <span class="pcu-modal__add-label" data-pcu-add-label>Add This Gift To My Order</span>
-          <span class="pcu-modal__spinner" aria-hidden="true"></span>
-        </button>
+        <div class="pcu-modal__actions">
+          <button type="button" class="pcu-modal__add" data-pcu-add>
+            <span class="pcu-modal__add-label" data-pcu-add-label>Add This Gift To My Order</span>
+            <span class="pcu-modal__spinner" aria-hidden="true"></span>
+          </button>
 
-        <button type="button" class="pcu-modal__decline" data-pcu-decline>
-          I&rsquo;d rather pay full price
-        </button>
+          <button type="button" class="pcu-modal__decline" data-pcu-decline>
+            I&rsquo;d rather pay full price
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -265,6 +267,12 @@
 
   .pcu-modal__savings[hidden] { display: none; }
 
+  /* Wraps the accept + decline buttons. Transparent on desktop; becomes a
+     sticky footer on mobile (background is set to the dialog colour by JS). */
+  .pcu-modal__actions {
+    background: #ffffff;
+  }
+
   .pcu-modal__add {
     position: relative;
     width: 100%;
@@ -316,15 +324,29 @@
 
   @keyframes pcu-spin { to { transform: rotate(360deg); } }
 
-  @media screen and (max-width: 600px) {
+  /* ---- Mobile: full-screen, edge-to-edge takeover ---- */
+  @media screen and (max-width: 749px) {
     .pcu-modal {
-      padding: 1rem;
-      align-items: flex-start;
+      /* No padding/backdrop gap — the dialog fills the screen. */
+      padding: 0;
+      align-items: stretch;
+      overflow: hidden;
     }
 
     .pcu-modal__dialog {
-      max-width: 100%;
+      width: 100vw;
+      max-width: none;
+      height: 100vh;
+      height: 100dvh; /* account for mobile browser chrome */
+      margin: 0;
+      border-radius: 0;
+      /* Column layout: fixed head/timer, scrollable body, sticky footer. */
+      display: flex;
+      flex-direction: column;
+      transform: translateY(1.2rem);
     }
+
+    .pcu-modal--active .pcu-modal__dialog { transform: none; }
 
     .pcu-modal__close {
       top: 1rem;
@@ -334,6 +356,7 @@
     }
 
     .pcu-modal__head {
+      flex: 0 0 auto;
       /* extra top room so the centred title never sits under the close button */
       padding: 3.4rem 1.6rem 1.2rem;
     }
@@ -346,14 +369,20 @@
     .pcu-modal__sub { font-size: 1.4rem; }
 
     .pcu-modal__timerbar {
+      flex: 0 0 auto;
       font-size: 1.5rem;
       padding: 0.9rem 1.2rem;
     }
 
+    /* The scrollable region — grows to fill and scrolls if content overflows. */
     .pcu-modal__body {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
       flex-direction: column;
       gap: 1.4rem;
-      padding: 1.6rem;
+      padding: 1.6rem 1.6rem 0;
     }
 
     .pcu-modal__media {
@@ -368,12 +397,33 @@
       overflow-wrap: break-word;
     }
 
+    /* Let the description flow — the whole body scrolls on mobile. */
+    .pcu-modal__desc {
+      max-height: none;
+      overflow: visible;
+      padding-right: 0;
+    }
+
     .pcu-modal__price-row {
       justify-content: flex-start;
       margin-bottom: 1.4rem;
     }
 
     .pcu-modal__amount { font-size: 1.9rem; }
+
+    /* Sticky footer: accept/decline stay reachable no matter how long content is. */
+    .pcu-modal__actions {
+      position: sticky;
+      bottom: 0;
+      margin-top: auto; /* pin to the bottom when content is short */
+      margin-left: -1.6rem;
+      margin-right: -1.6rem;
+      padding: 1.2rem 1.6rem;
+      padding-bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+      box-shadow: 0 -0.3rem 0.9rem rgba(0, 0, 0, 0.08);
+    }
+
+    .pcu-modal__add { margin-bottom: 0.8rem; }
 
     .pcu-modal__add,
     .pcu-modal__decline {

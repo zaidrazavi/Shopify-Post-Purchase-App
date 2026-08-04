@@ -203,6 +203,12 @@
         if (st.fontColor) dialog.style.color = st.fontColor;
         if (st.cornerRadius != null) dialog.style.borderRadius = st.cornerRadius + 'px';
       }
+      // The mobile sticky footer needs an opaque background matching the dialog
+      // so scrolling content doesn't show through behind the buttons.
+      if (st.backgroundColor) {
+        var actions = modal.querySelector('.pcu-modal__actions');
+        if (actions) actions.style.background = st.backgroundColor;
+      }
       if (st.fontFamily) modal.style.fontFamily = st.fontFamily;
       var info = modal.querySelector('.pcu-modal__info');
       if (info) info.style.textAlign = st.themeVariant === 'bold' ? 'center' : 'left';
