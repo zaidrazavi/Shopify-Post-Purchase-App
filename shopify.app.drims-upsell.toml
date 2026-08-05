@@ -1,0 +1,39 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "3270ab3ddd7d1bbb9747cc444b582df2"
+application_url = "https://shopify-post-purchase-app.onrender.com"
+embedded = true
+name = "DRIMS UPSELL"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_products"
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  compliance_topics = [
+    "customers/data_request",
+    "customers/redact",
+    "shop/redact",
+  ]
+  uri = "/webhooks/compliance"
+
+[auth]
+redirect_urls = [
+  "https://shopify-post-purchase-app.onrender.com/auth/callback",
+  "https://shopify-post-purchase-app.onrender.com/auth/shopify/callback",
+  "https://shopify-post-purchase-app.onrender.com/api/auth/callback"
+]
+
+[build]
+automatically_update_urls_on_dev = false
