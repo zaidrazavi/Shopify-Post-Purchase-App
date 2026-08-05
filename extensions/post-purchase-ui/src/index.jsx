@@ -105,7 +105,10 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
   // plus an optional nested `downsell`. Both are pre-fetched so switching steps
   // needs no network call.
   const payload = storage.initialData?.offer;
-  const mainOffer = payload;
+  // Defensive: if the offer didn't survive from ShouldRender for any reason,
+  // fall back to an empty object so the hooks below can't throw and crash the
+  // render (a crash makes Shopify silently skip the post-purchase page).
+  const mainOffer = payload ?? {};
   const downsellOffer = payload?.downsell ?? null;
 
   // "main" = the upsell shown first; "downsell" = the fallback after a decline.
@@ -126,6 +129,12 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
       : 0,
   );
 
+  // If the offer somehow didn't come through, don't render a broken empty page —
+  // gracefully end the post-purchase step so the buyer proceeds to Thank-You.
+  useEffect(() => {
+    if (!payload) done();
+  }, [payload, done]);
+
   useEffect(() => {
     if (!mainOffer.countdownEnabled || step !== "main") return undefined;
     const id = setInterval(() => {
@@ -143,6 +152,10 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     setCalculatedPurchase(null);
 
     async function calculate() {
+      if (!offer?.changes?.length) {
+        setLoading(false);
+        return;
+      }
       try {
         const result = await calculateChangeset({ changes: offer.changes });
         if (!cancelled) {
