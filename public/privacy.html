@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Privacy Policy — Drims Post Purchase</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        color: #1a1a2e;
+        background: #ffffff;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 40px 20px 80px;
+      }
+      h1 {
+        font-size: 1.9rem;
+        margin-bottom: 0.25rem;
+      }
+      h2 {
+        font-size: 1.25rem;
+        margin-top: 2rem;
+      }
+      .updated {
+        color: #6d7175;
+        font-size: 0.9rem;
+        margin-top: 0;
+      }
+      ul {
+        padding-left: 1.25rem;
+      }
+      li {
+        margin: 0.35rem 0;
+      }
+      code {
+        background: rgba(0, 0, 0, 0.06);
+        padding: 0.1rem 0.3rem;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+      a {
+        color: #2c6ecb;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          color: #e3e3e3;
+          background: #14161a;
+        }
+        code {
+          background: rgba(255, 255, 255, 0.1);
+        }
+        a {
+          color: #7aa7ff;
+        }
+        .updated {
+          color: #9aa0a6;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Privacy Policy — Drims Post Purchase</h1>
+    <p class="updated">Last updated: August 5, 2026</p>
+
+    <p>
+      Drims Post Purchase (&ldquo;the App,&rdquo; &ldquo;we,&rdquo;
+      &ldquo;us&rdquo;) is a Shopify app that lets merchants show pre-purchase
+      (cart) and post-purchase (after-checkout) upsell offers in their store.
+      This policy explains what data the App accesses, how it is used, how long
+      it is kept, and how to contact us.
+    </p>
+
+    <h2>Summary</h2>
+    <ul>
+      <li>
+        The App stores <strong>merchant configuration</strong> and a
+        <strong>snapshot of the products</strong> a merchant selects for their
+        offers.
+      </li>
+      <li>
+        The App does <strong>not</strong> collect or store
+        <strong>customer/buyer personal information</strong> (no names, emails,
+        addresses, or payment details).
+      </li>
+      <li>Data is used <strong>only</strong> to operate the App's upsell features.</li>
+      <li>We do <strong>not</strong> sell or share data for advertising.</li>
+    </ul>
+
+    <h2>What data we access and store</h2>
+    <p><strong>From the merchant (store owner), via the App's admin interface:</strong></p>
+    <ul>
+      <li>
+        Offer and popup <strong>configuration</strong> you enter — headlines,
+        descriptions, button text, colors, fonts, countdown settings, and
+        enable/disable status.
+      </li>
+      <li>
+        The <strong>product/variant you select</strong> for an offer through
+        Shopify's product picker. We store a snapshot of that product's public
+        catalog details: product and variant IDs, title, image URL, price, and
+        compare-at price. This is your store's own catalog data, not personal
+        data.
+      </li>
+    </ul>
+
+    <p><strong>Via Shopify APIs / the Shopify platform:</strong></p>
+    <ul>
+      <li>
+        Your <strong>store's domain</strong> (e.g.
+        <code>your-store.myshopify.com</code>) and an
+        <strong>offline access token</strong>, which are stored to authenticate
+        the App with your store. The App requests a single, read-only scope —
+        <code>read_products</code> — used solely to power the product picker.
+      </li>
+    </ul>
+
+    <p><strong>During checkout (transient, not stored):</strong></p>
+    <ul>
+      <li>
+        When a buyer reaches the post-purchase step, Shopify calls the App with
+        an <strong>order reference token</strong> and your store domain so the
+        App can build the correct offer and sign the resulting order change.
+        This request metadata is processed to generate the offer and is
+        <strong>not used to identify any individual</strong> and is
+        <strong>not retained</strong> as customer data.
+      </li>
+    </ul>
+
+    <p><strong>What we do NOT collect:</strong></p>
+    <ul>
+      <li>
+        We do <strong>not</strong> collect, store, or process buyer personal
+        data — no customer names, email addresses, shipping/billing addresses,
+        or payment/card information. Payments are handled entirely by Shopify.
+      </li>
+    </ul>
+
+    <h2>How we use data</h2>
+    <p>We use the data above solely to:</p>
+    <ul>
+      <li>Authenticate the App with your Shopify store.</li>
+      <li>Save and display your configured pre-purchase and post-purchase offers.</li>
+      <li>
+        Render the correct offer and apply the corresponding order change when a
+        buyer accepts one.
+      </li>
+    </ul>
+    <p>
+      We do <strong>not</strong> sell your data, and we do <strong>not</strong>
+      use it for advertising or share it with third parties except the
+      infrastructure providers needed to run the App (see below).
+    </p>
+
+    <h2>Where data is processed (subprocessors)</h2>
+    <p>
+      The App runs on <strong>Render</strong> (application hosting) and stores
+      configuration and session data in a <strong>Neon</strong> PostgreSQL
+      database. These providers process data only to host and operate the App on
+      our behalf. Data may be processed in the United States.
+    </p>
+
+    <h2>Data retention and deletion</h2>
+    <ul>
+      <li>
+        Configuration and session data are retained while the App is installed
+        on your store.
+      </li>
+      <li>
+        When you <strong>uninstall</strong> the App, or when Shopify sends a
+        <code>shop/redact</code> request (approximately 48 hours after
+        uninstall), the App <strong>deletes all data it holds for your
+        store</strong> — offer configuration, popup configuration, and session
+        records.
+      </li>
+      <li>
+        Because the App stores no customer personal data,
+        <code>customers/data_request</code> and <code>customers/redact</code>
+        requests are acknowledged but require no data to be returned or erased.
+      </li>
+    </ul>
+
+    <h2>Compliance</h2>
+    <p>
+      The App honors Shopify's mandatory privacy webhooks
+      (<code>customers/data_request</code>, <code>customers/redact</code>,
+      <code>shop/redact</code>) and is designed to support merchants'
+      obligations under privacy regulations such as the GDPR and CCPA/CPRA.
+    </p>
+
+    <h2>Changes to this policy</h2>
+    <p>
+      We may update this policy from time to time. Material changes will be
+      reflected by updating the &ldquo;Last updated&rdquo; date above.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+      For any questions or privacy requests, contact us at
+      <a href="mailto:support@forpaws.store">support@forpaws.store</a>.
+    </p>
+  </body>
+</html>
