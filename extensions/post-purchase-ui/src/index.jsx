@@ -97,7 +97,13 @@ extend("Checkout::PostPurchase::ShouldRender", async ({ inputData, storage }) =>
  * optionally make use of data stored during `ShouldRender` extension point to
  * expedite time-to-first-meaningful-paint.
  */
-render("Checkout::PostPurchase::Render", App);
+// The SDK's `render` INVOKES this second argument as a function (`render(input)`)
+// and uses the result as the element to mount. Passing `App` directly would call
+// `App(input)` as a plain function — running its hooks outside React's render
+// phase, which throws "invalid hook call" (#321) and makes Shopify skip the page.
+// Return an <App /> ELEMENT (with the extension input spread as props) so App is
+// mounted by the reconciler and its hooks run correctly.
+render("Checkout::PostPurchase::Render", (input) => <App {...input} />);
 
 // Top-level React component
 export function App({ storage, inputData, calculateChangeset, applyChangeset, done }) {
