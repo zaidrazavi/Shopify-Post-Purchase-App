@@ -15,16 +15,11 @@ import {
   Banner,
   BlockStack,
   Button,
-  CalloutBanner,
-  Heading,
   Image,
   InlineStack,
   Layout,
-  Separator,
   Text,
   TextBlock,
-  TextContainer,
-  Tiles,
   View,
 } from "@shopify/post-purchase-ui-extensions-react";
 
@@ -256,6 +251,7 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
 
   return (
     <BlockStack spacing="loose">
+      {/* Countdown / urgency banner — red critical accent (top) */}
       {showCountdown ? (
         <Banner status="critical">
           <Text emphasized>
@@ -264,8 +260,15 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
         </Banner>
       ) : null}
 
-      <CalloutBanner title={offer.headline}>{offer.description}</CalloutBanner>
+      {/* Headline + sub-headline (centered, above the split) */}
+      <BlockStack spacing="tight" alignment="center">
+        <Text size="large" emphasized>
+          {offer.headline}
+        </Text>
+        {offer.description ? <Text subdued>{offer.description}</Text> : null}
+      </BlockStack>
 
+      {/* Horizontal split: product image (left) + details (right) — RevLift popup */}
       <Layout
         maxInlineSize={0.95}
         media={[
@@ -276,66 +279,54 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
       >
         <View>
           {offer.image ? (
-            <Image source={offer.image} description={offer.title} />
+            <Image
+              source={offer.image}
+              description={offer.title}
+              aspectRatio={1}
+              fit="cover"
+              bordered
+            />
           ) : null}
         </View>
         <View />
-        <BlockStack spacing="xloose">
-          <TextContainer>
-            <Heading>{offer.title}</Heading>
-            {loading ? (
-              <TextBlock>
-                <Text size="large" emphasized>
-                  Calculating price…
+        <BlockStack spacing="base">
+          <Text emphasized>{offer.title}</Text>
+
+          {loading ? (
+            <Text subdued>Calculating price…</Text>
+          ) : hasSavings ? (
+            <BlockStack spacing="tight">
+              <InlineStack spacing="tight">
+                <Text size="large" role="deletion" subdued>
+                  {offer.compareAtPrice} {displayCurrency}
                 </Text>
-              </TextBlock>
-            ) : hasSavings ? (
-              <BlockStack spacing="tight">
-                <InlineStack spacing="tight">
-                  <Text size="large" role="deletion" subdued>
-                    {offer.compareAtPrice} {displayCurrency}
-                  </Text>
-                  <Text size="large" emphasized>
-                    {finalPrice} {displayCurrency}
-                  </Text>
-                </InlineStack>
-                <Text appearance="success" emphasized>
-                  You save {offer.savings} {displayCurrency}
-                </Text>
-              </BlockStack>
-            ) : (
-              <TextBlock>
                 <Text size="large" emphasized>
                   {finalPrice} {displayCurrency}
                 </Text>
-              </TextBlock>
-            )}
-          </TextContainer>
+              </InlineStack>
+              <Text appearance="success" emphasized>
+                You save {offer.savings} {displayCurrency}
+              </Text>
+            </BlockStack>
+          ) : (
+            <Text size="large" emphasized>
+              {finalPrice} {displayCurrency}
+            </Text>
+          )}
 
-          {error ? (
-            <TextBlock appearance="critical">{error}</TextBlock>
-          ) : null}
+          {error ? <TextBlock appearance="critical">{error}</TextBlock> : null}
 
-          <Separator />
-
-          <Tiles>
-            <Button
-              submit
-              onPress={acceptOffer}
-              loading={processing}
-              disabled={loading || processing}
-            >
-              {offer.acceptButtonText}
-            </Button>
-            <View />
-            <Button
-              subdued
-              onPress={declineOffer}
-              disabled={processing}
-            >
-              {offer.declineButtonText}
-            </Button>
-          </Tiles>
+          <Button
+            submit
+            onPress={acceptOffer}
+            loading={processing}
+            disabled={loading || processing}
+          >
+            {offer.acceptButtonText}
+          </Button>
+          <Button plain onPress={declineOffer} disabled={processing}>
+            {offer.declineButtonText}
+          </Button>
         </BlockStack>
       </Layout>
     </BlockStack>
