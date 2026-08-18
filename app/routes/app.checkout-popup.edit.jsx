@@ -178,11 +178,14 @@ export default function CheckoutPopupEditor() {
   // collapsing hides the body via `s-box display="none"` — it does NOT unmount,
   // so the uncontrolled `defaultValue` inputs keep any unsaved edits.
   const [open, setOpen] = useState({
-    general: true,
-    display: false,
-    incentive: false,
-    buybox: false,
+    headline: true,
+    subheadline: false,
+    timer: false,
+    product: false,
+    details: false,
+    pricing: false,
     buttons: false,
+    settings: false,
   });
   const toggle = (key) => setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
 
@@ -300,73 +303,10 @@ export default function CheckoutPopupEditor() {
         <s-grid-item>
           <s-stack direction="block" gap="base">
             <CollapsibleCard
-              icon="paint-brush-flat"
-              title="General"
-              open={open.general}
-              onToggle={() => toggle("general")}
-            >
-              <s-select
-                name="fontFamily"
-                label="Font family"
-                value={form.fontFamily}
-              >
-                {FONT_OPTIONS.map((f) => (
-                  <s-option key={f.value} value={f.value}>
-                    {f.label}
-                  </s-option>
-                ))}
-              </s-select>
-              <s-color-field
-                name="fontColor"
-                label="Font color"
-                defaultValue={config.fontColor}
-              />
-              <s-color-field
-                name="backgroundColor"
-                label="Background color"
-                defaultValue={config.backgroundColor}
-              />
-              <s-select
-                name="themeVariant"
-                label="Theme style"
-                value={form.themeVariant}
-              >
-                <s-option value="classic">Classic (left-aligned)</s-option>
-                <s-option value="bold">Bold (centered)</s-option>
-              </s-select>
-              <s-number-field
-                name="cornerRadius"
-                label="Corner radius"
-                defaultValue={config.cornerRadius ?? 12}
-                min="0"
-                max="40"
-                suffix="px"
-              />
-            </CollapsibleCard>
-
-            <CollapsibleCard
-              icon="view"
-              title="Display"
-              open={open.display}
-              onToggle={() => toggle("display")}
-            >
-              <s-switch
-                name="hideIfInCart"
-                label="Hide if the cart already contains the upsell product"
-                defaultChecked={config.hideIfInCart}
-              />
-              <s-text type="strong">Trigger</s-text>
-              <s-paragraph>
-                Shown when the buyer clicks Checkout in the cart. (Product-page
-                triggers are out of scope for now.)
-              </s-paragraph>
-            </CollapsibleCard>
-
-            <CollapsibleCard
-              icon="discount"
-              title="Messaging & incentive"
-              open={open.incentive}
-              onToggle={() => toggle("incentive")}
+              icon="text-title"
+              title="Headline"
+              open={open.headline}
+              onToggle={() => toggle("headline")}
             >
               <s-switch
                 name="headlineEnabled"
@@ -378,7 +318,14 @@ export default function CheckoutPopupEditor() {
                 label="Headline"
                 defaultValue={config.headlineText}
               />
-              <s-divider />
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="text-block"
+              title="Sub-headline"
+              open={open.subheadline}
+              onToggle={() => toggle("subheadline")}
+            >
               <s-switch
                 name="subheadlineEnabled"
                 label="Show subheadline"
@@ -389,19 +336,14 @@ export default function CheckoutPopupEditor() {
                 label="Subheadline"
                 defaultValue={config.subheadlineText}
               />
-              <s-divider />
-              <s-switch
-                name="descriptionEnabled"
-                label="Show description"
-                defaultChecked={config.descriptionEnabled}
-              />
-              <s-text-area
-                name="descriptionText"
-                label="Description"
-                defaultValue={config.descriptionText}
-                rows="3"
-              />
-              <s-divider />
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="clock"
+              title="Timer Bar"
+              open={open.timer}
+              onToggle={() => toggle("timer")}
+            >
               <s-switch
                 name="countdownEnabled"
                 label="Show countdown timer"
@@ -422,9 +364,9 @@ export default function CheckoutPopupEditor() {
 
             <CollapsibleCard
               icon="product"
-              title="Buy box"
-              open={open.buybox}
-              onToggle={() => toggle("buybox")}
+              title="Product & Image"
+              open={open.product}
+              onToggle={() => toggle("product")}
             >
               <ProductPickerRow product={product} onPick={pickProduct} />
               <s-divider />
@@ -441,6 +383,33 @@ export default function CheckoutPopupEditor() {
                 <s-option value="cover">Cover (fill &amp; crop)</s-option>
                 <s-option value="contain">Contain (fit whole image)</s-option>
               </s-select>
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="product-list"
+              title="Product Details"
+              open={open.details}
+              onToggle={() => toggle("details")}
+            >
+              <s-switch
+                name="descriptionEnabled"
+                label="Show description"
+                defaultChecked={config.descriptionEnabled}
+              />
+              <s-text-area
+                name="descriptionText"
+                label="Description"
+                defaultValue={config.descriptionText}
+                rows="3"
+              />
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="cash-dollar"
+              title="Pricing"
+              open={open.pricing}
+              onToggle={() => toggle("pricing")}
+            >
               <s-switch
                 name="showCompareAt"
                 label="Show compare-at (was) price"
@@ -491,6 +460,62 @@ export default function CheckoutPopupEditor() {
                 </s-option>
                 <s-option value="close">Just close the popup</s-option>
               </s-select>
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="settings"
+              title="Popup Settings"
+              open={open.settings}
+              onToggle={() => toggle("settings")}
+            >
+              <s-select
+                name="fontFamily"
+                label="Font family"
+                value={form.fontFamily}
+              >
+                {FONT_OPTIONS.map((f) => (
+                  <s-option key={f.value} value={f.value}>
+                    {f.label}
+                  </s-option>
+                ))}
+              </s-select>
+              <s-color-field
+                name="fontColor"
+                label="Font color"
+                defaultValue={config.fontColor}
+              />
+              <s-color-field
+                name="backgroundColor"
+                label="Background color"
+                defaultValue={config.backgroundColor}
+              />
+              <s-select
+                name="themeVariant"
+                label="Theme style"
+                value={form.themeVariant}
+              >
+                <s-option value="classic">Classic (left-aligned)</s-option>
+                <s-option value="bold">Bold (centered)</s-option>
+              </s-select>
+              <s-number-field
+                name="cornerRadius"
+                label="Corner radius"
+                defaultValue={config.cornerRadius ?? 12}
+                min="0"
+                max="40"
+                suffix="px"
+              />
+              <s-divider />
+              <s-switch
+                name="hideIfInCart"
+                label="Hide if the cart already contains the upsell product"
+                defaultChecked={config.hideIfInCart}
+              />
+              <s-text type="strong">Trigger</s-text>
+              <s-paragraph>
+                Shown when the buyer clicks Checkout in the cart. (Product-page
+                triggers are out of scope for now.)
+              </s-paragraph>
             </CollapsibleCard>
           </s-stack>
         </s-grid-item>
