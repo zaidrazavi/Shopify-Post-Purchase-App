@@ -166,6 +166,18 @@ export default function OfferSettings() {
       : null,
   );
 
+  // Which collapsible sections are expanded. Collapsing hides via s-box display
+  // (not unmount), so the uncontrolled inputs keep any unsaved edits.
+  const [open, setOpen] = useState({
+    product: true,
+    pricing: false,
+    timer: false,
+    content: false,
+    downsell: false,
+    performance: false,
+  });
+  const toggle = (key) => setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+
   const pageRef = useRef(null);
   const saving = fetcher.state !== "idle";
 
@@ -268,7 +280,7 @@ export default function OfferSettings() {
   );
 
   return (
-    <s-page ref={pageRef} heading="Post-purchase offer">
+    <s-page ref={pageRef} inlineSize="large" heading="Post-purchase offer">
       <s-button
         slot="primary-action"
         onClick={save}
@@ -277,231 +289,304 @@ export default function OfferSettings() {
         Save
       </s-button>
 
-      {/* ---- Status summary ---- */}
+      {/* Status — full width above the two-pane editor */}
       <s-section>
-        <s-stack direction="inline" gap="base" alignItems="center">
-          <s-badge
-            tone={isLive ? "success" : "neutral"}
-            icon={isLive ? "check-circle" : "disabled"}
-          >
-            {isLive ? "Offer is Live" : "Offer is Off"}
-          </s-badge>
-          <s-switch
-            name="enabled"
-            label="Enable post-purchase offer"
-            defaultChecked={config.enabled}
-            details="When off, buyers go straight to the Thank You page."
-          />
+        <s-stack
+          direction="inline"
+          gap="base"
+          alignItems="center"
+          justifyContent="space-between"
+        >
+          <s-stack direction="inline" gap="base" alignItems="center">
+            <s-badge
+              tone={isLive ? "success" : "neutral"}
+              icon={isLive ? "check-circle" : "disabled"}
+            >
+              {isLive ? "Offer is Live" : "Offer is Off"}
+            </s-badge>
+            <s-switch
+              name="enabled"
+              label="Enable post-purchase offer"
+              defaultChecked={config.enabled}
+              details="When off, buyers go straight to the Thank You page."
+            />
+          </s-stack>
         </s-stack>
       </s-section>
 
-      {/* ---- Main offer ---- */}
-      <s-section heading="Main offer">
-        <s-badge tone="info" icon="cart-sale">
-          Step 1 · Shown first
-        </s-badge>
-
-        <ProductPickerRow
-          product={mainProduct}
-          onPick={() => pickProduct("main")}
-          emptyText="Choose the product offered right after checkout."
-        />
-
-        <s-divider />
-
-        <s-select
-          name="discountType"
-          label="Price adjustment"
-          value={form.discountType}
-        >
-          <s-option value="none">Use the product&apos;s regular price</s-option>
-          <s-option value="percentage">Percentage discount</s-option>
-          <s-option value="fixed">Fixed override price</s-option>
-        </s-select>
-        {form.discountType !== "none" ? (
-          <s-number-field
-            name="discountValue"
-            label={
-              form.discountType === "percentage"
-                ? "Discount percentage"
-                : "Override price"
-            }
-            defaultValue={config.discountValue ?? ""}
-            min="0"
-            {...(form.discountType === "percentage"
-              ? { suffix: "%", max: "100" }
-              : {})}
-          />
-        ) : null}
-
-        <s-divider />
-
-        <s-switch
-          name="countdownEnabled"
-          label="Show countdown timer"
-          defaultChecked={config.countdownEnabled}
-          details="A visual urgency bar above the offer. Resets each page load; never expires the offer."
-        />
-        <s-number-field
-          name="countdownMinutes"
-          label="Countdown length (minutes)"
-          defaultValue={config.countdownMinutes ?? 10}
-          min="1"
-        />
-
-        <s-divider />
-
-        <s-text-field
-          name="headline"
-          label="Headline"
-          defaultValue={config.headline}
-        />
-        <s-text-area
-          name="description"
-          label="Description"
-          defaultValue={config.description}
-          rows="2"
-        />
-        <s-text-field
-          name="acceptButtonText"
-          label="Accept button text"
-          defaultValue={config.acceptButtonText}
-        />
-        <s-text-field
-          name="declineButtonText"
-          label="Decline button text"
-          defaultValue={config.declineButtonText}
-        />
-
-        <s-divider />
-        <StatRow accentTone="info" />
-      </s-section>
-
-      {/* ---- Flow connector: main -> downsell ---- */}
-      <FlowConnector />
-
-      {/* ---- Downsell ---- */}
-      <s-section heading="Downsell (shown if the main offer is declined)">
-        <s-badge tone="warning" icon="cart-down">
-          Step 2 · If declined
-        </s-badge>
-
-        <s-switch
-          name="downsellEnabled"
-          label="Enable downsell"
-          defaultChecked={config.downsellEnabled}
-          details="When off, declining the main offer goes straight to the Thank You page."
-        />
-
-        <ProductPickerRow
-          product={downsellProduct}
-          onPick={() => pickProduct("downsell")}
-          emptyText="Choose the fallback product shown after a decline."
-        />
-
-        <s-divider />
-
-        <s-select
-          name="downsellDiscountType"
-          label="Price adjustment"
-          value={form.downsellDiscountType}
-        >
-          <s-option value="none">Use the product&apos;s regular price</s-option>
-          <s-option value="percentage">Percentage discount</s-option>
-          <s-option value="fixed">Fixed override price</s-option>
-        </s-select>
-        {form.downsellDiscountType !== "none" ? (
-          <s-number-field
-            name="downsellDiscountValue"
-            label={
-              form.downsellDiscountType === "percentage"
-                ? "Discount percentage"
-                : "Override price"
-            }
-            defaultValue={config.downsellDiscountValue ?? ""}
-            min="0"
-            {...(form.downsellDiscountType === "percentage"
-              ? { suffix: "%", max: "100" }
-              : {})}
-          />
-        ) : null}
-
-        <s-divider />
-
-        <s-text-field
-          name="downsellHeadline"
-          label="Headline"
-          defaultValue={config.downsellHeadline}
-        />
-        <s-text-area
-          name="downsellDescription"
-          label="Description"
-          defaultValue={config.downsellDescription}
-          rows="2"
-        />
-        <s-text-field
-          name="downsellAcceptButtonText"
-          label="Accept button text"
-          defaultValue={config.downsellAcceptButtonText}
-        />
-        <s-text-field
-          name="downsellDeclineButtonText"
-          label="Decline button text"
-          defaultValue={config.downsellDeclineButtonText}
-        />
-
-        <s-divider />
-        <StatRow accentTone="warning" />
-      </s-section>
-
-      {/* ---- Live preview (right column) ---- */}
-      <s-section slot="aside" heading="Live preview">
-        <OfferPreview
-          product={mainProduct}
-          pricing={preview}
-          headline={form.headline}
-          description={form.description}
-          acceptText={form.acceptButtonText}
-          declineText={form.declineButtonText}
-          countdownEnabled={form.countdownEnabled}
-          countdownMinutes={form.countdownMinutes}
-        />
-        {form.downsellEnabled && downsellProduct ? (
-          <s-stack direction="block" gap="tight">
-            <s-divider />
-            <s-stack direction="inline" gap="tight" alignItems="center">
-              <s-icon type="arrow-down" tone="warning" />
-              <s-badge tone="warning" icon="cart-down">
-                Step 2 · Downsell
+      {/* Split-panel editor: collapsible controls (left) + live preview (right) */}
+      <s-grid
+        gridTemplateColumns="minmax(0, 360px) minmax(0, 1fr)"
+        gap="base"
+        alignItems="start"
+      >
+        {/* Left: collapsible control sections */}
+        <s-grid-item>
+          <s-stack direction="block" gap="base">
+            <CollapsibleCard
+              icon="product"
+              title="Product & image"
+              open={open.product}
+              onToggle={() => toggle("product")}
+            >
+              <s-badge tone="info" icon="cart-sale">
+                Step 1 · Shown first
               </s-badge>
-            </s-stack>
-            <s-text type="small">
-              If the main offer is declined, “{downsellProduct.title}” is shown
-              next.
-            </s-text>
+              <ProductPickerRow
+                product={mainProduct}
+                onPick={() => pickProduct("main")}
+                emptyText="Choose the product offered right after checkout."
+              />
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="discount"
+              title="Pricing"
+              open={open.pricing}
+              onToggle={() => toggle("pricing")}
+            >
+              <s-select
+                name="discountType"
+                label="Price adjustment"
+                value={form.discountType}
+              >
+                <s-option value="none">
+                  Use the product&apos;s regular price
+                </s-option>
+                <s-option value="percentage">Percentage discount</s-option>
+                <s-option value="fixed">Fixed override price</s-option>
+              </s-select>
+              {form.discountType !== "none" ? (
+                <s-number-field
+                  name="discountValue"
+                  label={
+                    form.discountType === "percentage"
+                      ? "Discount percentage"
+                      : "Override price"
+                  }
+                  defaultValue={config.discountValue ?? ""}
+                  min="0"
+                  {...(form.discountType === "percentage"
+                    ? { suffix: "%", max: "100" }
+                    : {})}
+                />
+              ) : null}
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="clock"
+              title="Timer"
+              open={open.timer}
+              onToggle={() => toggle("timer")}
+            >
+              <s-switch
+                name="countdownEnabled"
+                label="Show countdown timer"
+                defaultChecked={config.countdownEnabled}
+                details="A visual urgency bar above the offer. Resets each page load; never expires the offer."
+              />
+              <s-number-field
+                name="countdownMinutes"
+                label="Countdown length (minutes)"
+                defaultValue={config.countdownMinutes ?? 10}
+                min="1"
+              />
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="text"
+              title="Content & buttons"
+              open={open.content}
+              onToggle={() => toggle("content")}
+            >
+              <s-text-field
+                name="headline"
+                label="Headline"
+                defaultValue={config.headline}
+              />
+              <s-text-area
+                name="description"
+                label="Description"
+                defaultValue={config.description}
+                rows="2"
+              />
+              <s-text-field
+                name="acceptButtonText"
+                label="Accept button text"
+                defaultValue={config.acceptButtonText}
+              />
+              <s-text-field
+                name="declineButtonText"
+                label="Decline button text"
+                defaultValue={config.declineButtonText}
+              />
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="cart-down"
+              title="Downsell (if declined)"
+              open={open.downsell}
+              onToggle={() => toggle("downsell")}
+            >
+              <s-badge tone="warning" icon="cart-down">
+                Step 2 · If declined
+              </s-badge>
+              <s-switch
+                name="downsellEnabled"
+                label="Enable downsell"
+                defaultChecked={config.downsellEnabled}
+                details="When off, declining the main offer goes straight to the Thank You page."
+              />
+              <ProductPickerRow
+                product={downsellProduct}
+                onPick={() => pickProduct("downsell")}
+                emptyText="Choose the fallback product shown after a decline."
+              />
+              <s-divider />
+              <s-select
+                name="downsellDiscountType"
+                label="Price adjustment"
+                value={form.downsellDiscountType}
+              >
+                <s-option value="none">
+                  Use the product&apos;s regular price
+                </s-option>
+                <s-option value="percentage">Percentage discount</s-option>
+                <s-option value="fixed">Fixed override price</s-option>
+              </s-select>
+              {form.downsellDiscountType !== "none" ? (
+                <s-number-field
+                  name="downsellDiscountValue"
+                  label={
+                    form.downsellDiscountType === "percentage"
+                      ? "Discount percentage"
+                      : "Override price"
+                  }
+                  defaultValue={config.downsellDiscountValue ?? ""}
+                  min="0"
+                  {...(form.downsellDiscountType === "percentage"
+                    ? { suffix: "%", max: "100" }
+                    : {})}
+                />
+              ) : null}
+              <s-divider />
+              <s-text-field
+                name="downsellHeadline"
+                label="Headline"
+                defaultValue={config.downsellHeadline}
+              />
+              <s-text-area
+                name="downsellDescription"
+                label="Description"
+                defaultValue={config.downsellDescription}
+                rows="2"
+              />
+              <s-text-field
+                name="downsellAcceptButtonText"
+                label="Accept button text"
+                defaultValue={config.downsellAcceptButtonText}
+              />
+              <s-text-field
+                name="downsellDeclineButtonText"
+                label="Decline button text"
+                defaultValue={config.downsellDeclineButtonText}
+              />
+            </CollapsibleCard>
+
+            <CollapsibleCard
+              icon="chart-vertical"
+              title="Performance"
+              open={open.performance}
+              onToggle={() => toggle("performance")}
+            >
+              <StatRow accentTone="info" />
+            </CollapsibleCard>
           </s-stack>
-        ) : null}
-      </s-section>
+        </s-grid-item>
+
+        {/* Right: live preview (sticky) */}
+        <s-grid-item>
+          <div style={{ position: "sticky", top: 0 }}>
+            <s-section heading="Live preview">
+              <OfferPreview
+                product={mainProduct}
+                pricing={preview}
+                headline={form.headline}
+                description={form.description}
+                acceptText={form.acceptButtonText}
+                declineText={form.declineButtonText}
+                countdownEnabled={form.countdownEnabled}
+                countdownMinutes={form.countdownMinutes}
+              />
+              {form.downsellEnabled && downsellProduct ? (
+                <s-stack direction="block" gap="tight">
+                  <s-divider />
+                  <s-stack direction="inline" gap="tight" alignItems="center">
+                    <s-icon type="arrow-down" tone="warning" />
+                    <s-badge tone="warning" icon="cart-down">
+                      Step 2 · Downsell
+                    </s-badge>
+                  </s-stack>
+                  <s-text type="small">
+                    If the main offer is declined, “{downsellProduct.title}” is
+                    shown next.
+                  </s-text>
+                </s-stack>
+              ) : null}
+            </s-section>
+          </div>
+        </s-grid-item>
+      </s-grid>
     </s-page>
   );
 }
 
-// Visual connector between the main offer and downsell cards.
-function FlowConnector() {
+// Accordion card: an s-section whose body is toggled with `s-box display`. The
+// body is hidden (not unmounted) so uncontrolled inputs keep their edited values.
+function CollapsibleCard({ icon, title, open, onToggle, children }) {
   return (
-    <s-box paddingBlock="base">
-      <s-stack direction="block" gap="none" alignItems="center">
-        <s-icon type="arrow-down" tone="warning" size="large" />
-        <s-badge tone="warning">If declined, show the downsell</s-badge>
-      </s-stack>
-    </s-box>
+    <s-section padding="none">
+      <s-clickable
+        onClick={onToggle}
+        padding="base"
+        accessibilityLabel={`${open ? "Collapse" : "Expand"} ${title}`}
+        style={{ display: "block", width: "100%" }}
+      >
+        <s-stack
+          direction="inline"
+          gap="base"
+          alignItems="center"
+          justifyContent="space-between"
+        >
+          <s-stack direction="inline" gap="small" alignItems="center">
+            <s-icon type={icon} tone="neutral" />
+            <s-text type="strong">{title}</s-text>
+          </s-stack>
+          <s-icon type={open ? "chevron-up" : "chevron-down"} tone="neutral" />
+        </s-stack>
+      </s-clickable>
+      <s-box
+        display={open ? "auto" : "none"}
+        paddingInline="base"
+        paddingBlockEnd="base"
+      >
+        <s-stack direction="block" gap="base">
+          <s-divider />
+          {children}
+        </s-stack>
+      </s-box>
+    </s-section>
   );
 }
 
+// Stat labels mirror RevLift's funnels metrics shown in revlift.mp4
+// (Views, Conversion, Revenue, Rev/Visit). Values are placeholders until
+// analytics tracking is added.
 const STAT_TILES = [
   { label: "Views", icon: "view" },
-  { label: "Accepted", icon: "order-fulfilled" },
+  { label: "Conversion", icon: "chart-line" },
   { label: "Revenue", icon: "cash-dollar" },
+  { label: "Rev/Visit", icon: "chart-vertical" },
 ];
 
 // Placeholder dashboard metrics — real analytics tracking isn't wired yet, so
@@ -510,7 +595,7 @@ const STAT_TILES = [
 function StatRow({ accentTone }) {
   return (
     <s-stack direction="block" gap="tight">
-      <s-stack direction="inline" gap="base">
+      <s-grid gridTemplateColumns="repeat(2, minmax(0, 1fr))" gap="base">
         {STAT_TILES.map((stat) => (
           <StatTile
             key={stat.label}
@@ -519,7 +604,7 @@ function StatRow({ accentTone }) {
             tone={accentTone}
           />
         ))}
-      </s-stack>
+      </s-grid>
       <s-stack direction="inline" gap="tight" alignItems="center">
         <s-badge tone="info" icon="clock">
           Coming soon
