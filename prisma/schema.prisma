@@ -75,6 +75,14 @@ model OfferConfig {
   downsellAcceptButtonText  String @default("Yes, Add This To My Order")
   downsellDeclineButtonText String @default("No thanks")
 
+  // --- Style / branding (admin live-preview only for now; stored for future
+  // storefront use). All nullable so existing rows are untouched by the migration.
+  bannerBackgroundColor String? // urgency banner background, hex e.g. "#E3F9E5"
+  bannerTextColor       String? // urgency banner text, hex
+  bannerIconColor       String? // banner icon color, hex (icon shown when set)
+  previewButtonColor    String? // admin-preview CTA button color, hex
+  cardLayout            String? // "horizontal" | "vertical"
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }

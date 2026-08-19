@@ -50,7 +50,15 @@ const DEFAULT_CONFIG = {
   downsellDescription: DEFAULT_DOWNSELL_DESCRIPTION,
   downsellAcceptButtonText: DEFAULT_DOWNSELL_ACCEPT_TEXT,
   downsellDeclineButtonText: DEFAULT_DOWNSELL_DECLINE_TEXT,
+  // Style / branding (admin preview only for now). Nullable — null = use defaults.
+  bannerBackgroundColor: null,
+  bannerTextColor: null,
+  bannerIconColor: null,
+  previewButtonColor: null,
+  cardLayout: null,
 };
+
+export const CARD_LAYOUTS = ["horizontal", "vertical"];
 
 /** Returns the shop's saved config, or sensible defaults if none exists yet. */
 export async function getOfferConfig(shop) {
@@ -82,6 +90,13 @@ function normDiscountValue(discountType, raw) {
   if (discountType === "none") return null;
   const parsed = Number.parseFloat(raw);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+// Accepts #RGB / #RRGGBB; anything else (including empty) becomes null.
+function normColorOrNull(v) {
+  const s = str(v);
+  if (s && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s)) return s.toUpperCase();
+  return null;
 }
 
 function normalizeInput(input) {
@@ -131,6 +146,14 @@ function normalizeInput(input) {
       str(input.downsellAcceptButtonText) ?? DEFAULT_DOWNSELL_ACCEPT_TEXT,
     downsellDeclineButtonText:
       str(input.downsellDeclineButtonText) ?? DEFAULT_DOWNSELL_DECLINE_TEXT,
+    // Style / branding (nullable)
+    bannerBackgroundColor: normColorOrNull(input.bannerBackgroundColor),
+    bannerTextColor: normColorOrNull(input.bannerTextColor),
+    bannerIconColor: normColorOrNull(input.bannerIconColor),
+    previewButtonColor: normColorOrNull(input.previewButtonColor),
+    cardLayout: CARD_LAYOUTS.includes(input.cardLayout)
+      ? input.cardLayout
+      : null,
   };
 }
 
@@ -313,6 +336,15 @@ export function buildOfferPayload(config) {
     countdownEnabled: Boolean(config.countdownEnabled),
     countdownMinutes: config.countdownMinutes ?? 10,
     downsell: downsellView,
+    // Style values are carried through for future storefront use. The current
+    // extension ignores them (remote-ui can't apply custom colors yet).
+    style: {
+      bannerBackgroundColor: config.bannerBackgroundColor ?? null,
+      bannerTextColor: config.bannerTextColor ?? null,
+      bannerIconColor: config.bannerIconColor ?? null,
+      previewButtonColor: config.previewButtonColor ?? null,
+      cardLayout: config.cardLayout ?? null,
+    },
   };
 }
 

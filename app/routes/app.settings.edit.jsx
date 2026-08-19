@@ -55,6 +55,12 @@ export const action = async ({ request }) => {
     downsellDescription: get("downsellDescription"),
     downsellAcceptButtonText: get("downsellAcceptButtonText"),
     downsellDeclineButtonText: get("downsellDeclineButtonText"),
+    // Style / branding
+    bannerBackgroundColor: get("bannerBackgroundColor"),
+    bannerTextColor: get("bannerTextColor"),
+    bannerIconColor: get("bannerIconColor"),
+    previewButtonColor: get("previewButtonColor"),
+    cardLayout: get("cardLayout"),
   });
 
   return { ok: true, config: saved };
@@ -148,6 +154,12 @@ export default function OfferSettings() {
     downsellDescription: config.downsellDescription ?? "",
     downsellAcceptButtonText: config.downsellAcceptButtonText ?? "",
     downsellDeclineButtonText: config.downsellDeclineButtonText ?? "",
+    // Style / branding (admin preview only for now)
+    bannerBackgroundColor: config.bannerBackgroundColor || "#E3F9E5",
+    bannerTextColor: config.bannerTextColor || "#1A1A2E",
+    bannerIconColor: config.bannerIconColor || "#22C55E",
+    previewButtonColor: config.previewButtonColor || "#1A1A2E",
+    cardLayout: config.cardLayout || "horizontal",
   }));
 
   const [mainProduct, setMainProduct] = useState(
@@ -182,6 +194,7 @@ export default function OfferSettings() {
     pricing: false,
     timer: false,
     content: false,
+    style: false,
     downsell: step === "downsell",
     performance: false,
   });
@@ -276,6 +289,11 @@ export default function OfferSettings() {
         downsellDescription: form.downsellDescription,
         downsellAcceptButtonText: form.downsellAcceptButtonText,
         downsellDeclineButtonText: form.downsellDeclineButtonText,
+        bannerBackgroundColor: form.bannerBackgroundColor,
+        bannerTextColor: form.bannerTextColor,
+        bannerIconColor: form.bannerIconColor,
+        previewButtonColor: form.previewButtonColor,
+        cardLayout: form.cardLayout,
       },
       { method: "POST" },
     );
@@ -440,6 +458,42 @@ export default function OfferSettings() {
             </CollapsibleCard>
 
             <CollapsibleCard
+              icon="paint-brush-flat"
+              title="Style"
+              open={open.style}
+              onToggle={() => toggle("style")}
+            >
+              <s-text type="small">
+                These choices appear in the live preview and are saved. The real
+                storefront still uses Shopify&apos;s checkout styling for now.
+              </s-text>
+              <s-color-field
+                name="bannerBackgroundColor"
+                label="Banner background color"
+                defaultValue={config.bannerBackgroundColor || "#E3F9E5"}
+              />
+              <s-color-field
+                name="bannerTextColor"
+                label="Banner text color"
+                defaultValue={config.bannerTextColor || "#1A1A2E"}
+              />
+              <s-color-field
+                name="bannerIconColor"
+                label="Banner icon color"
+                defaultValue={config.bannerIconColor || "#22C55E"}
+              />
+              <s-color-field
+                name="previewButtonColor"
+                label="Button color"
+                defaultValue={config.previewButtonColor || "#1A1A2E"}
+              />
+              <s-select name="cardLayout" label="Layout" value={form.cardLayout}>
+                <s-option value="horizontal">Horizontal (image left)</s-option>
+                <s-option value="vertical">Vertical (image on top)</s-option>
+              </s-select>
+            </CollapsibleCard>
+
+            <CollapsibleCard
               icon="cart-down"
               title="Downsell (if declined)"
               open={open.downsell}
@@ -534,6 +588,11 @@ export default function OfferSettings() {
                 declineText={form.declineButtonText}
                 countdownEnabled={form.countdownEnabled}
                 countdownMinutes={form.countdownMinutes}
+                bannerBackgroundColor={form.bannerBackgroundColor}
+                bannerTextColor={form.bannerTextColor}
+                bannerIconColor={form.bannerIconColor}
+                buttonColor={form.previewButtonColor}
+                layout={form.cardLayout}
               />
               {form.downsellEnabled && downsellProduct ? (
                 <s-stack direction="block" gap="tight">
@@ -685,6 +744,8 @@ function ProductPickerRow({ product, onPick, emptyText }) {
   );
 }
 
+// The preview uses inline styles for the banner and button so it can reflect
+// the merchant's chosen colors — Polaris tokens can't express arbitrary hex.
 function OfferPreview({
   product,
   pricing,
@@ -694,6 +755,11 @@ function OfferPreview({
   declineText,
   countdownEnabled,
   countdownMinutes,
+  bannerBackgroundColor,
+  bannerTextColor,
+  bannerIconColor,
+  buttonColor,
+  layout,
 }) {
   if (!product) {
     return (
@@ -715,6 +781,52 @@ function OfferPreview({
         )
       : null;
 
+  const isVertical = layout === "vertical";
+
+  const image = product.image ? (
+    <s-thumbnail src={product.image} alt={product.title ?? ""} size="large-500" />
+  ) : null;
+
+  const details = (
+    <s-stack direction="block" gap="base">
+      <s-text type="strong">{product.title}</s-text>
+      {pricing ? (
+        <s-stack direction="inline" gap="base" alignItems="center">
+          {pricing.compareAtPrice ? (
+            <s-text type="redundant">{pricing.compareAtPrice}</s-text>
+          ) : null}
+          <s-text type="strong">{pricing.finalPrice}</s-text>
+          {savePct != null ? (
+            <s-badge tone="success">SAVE {savePct}%</s-badge>
+          ) : null}
+        </s-stack>
+      ) : null}
+      <div
+        style={{
+          background: buttonColor || "#1A1A2E",
+          color: "#ffffff",
+          textAlign: "center",
+          padding: "12px",
+          borderRadius: "8px",
+          fontWeight: 600,
+          fontSize: "14px",
+        }}
+      >
+        {acceptText || "Accept"}
+      </div>
+      <div
+        style={{
+          textAlign: "center",
+          textDecoration: "underline",
+          color: "#6D7175",
+          fontSize: "13px",
+        }}
+      >
+        {declineText || "Decline"}
+      </div>
+    </s-stack>
+  );
+
   return (
     <s-box
       padding="base"
@@ -724,44 +836,53 @@ function OfferPreview({
     >
       <s-stack direction="block" gap="base">
         {countdownEnabled ? (
-          <s-banner tone="critical">
-            <s-text type="strong">Special Offer Ends In: {mins}:00</s-text>
-          </s-banner>
+          <div
+            style={{
+              background: bannerBackgroundColor || "#E3F9E5",
+              color: bannerTextColor || "#1A1A2E",
+              padding: "10px 12px",
+              borderRadius: "8px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              fontWeight: 600,
+              fontSize: "14px",
+            }}
+          >
+            <span
+              style={{
+                background: bannerIconColor || "#22C55E",
+                color: "#ffffff",
+                width: "22px",
+                height: "22px",
+                borderRadius: "50%",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "13px",
+                flex: "0 0 auto",
+              }}
+            >
+              %
+            </span>
+            <span>Special Offer Ends In: {mins}:00</span>
+          </div>
         ) : null}
 
         {headline ? <s-heading>{headline}</s-heading> : null}
         {description ? <s-paragraph>{description}</s-paragraph> : null}
 
-        {product.image ? (
-          <s-thumbnail
-            src={product.image}
-            alt={product.title ?? ""}
-            size="large-500"
-          />
-        ) : null}
-
-        <s-text type="strong">{product.title}</s-text>
-
-        {pricing ? (
-          <s-stack direction="inline" gap="base" alignItems="center">
-            {pricing.compareAtPrice ? (
-              <s-text type="redundant">{pricing.compareAtPrice}</s-text>
-            ) : null}
-            <s-text type="strong">{pricing.finalPrice}</s-text>
-            {savePct != null ? (
-              <s-badge tone="success">SAVE {savePct}%</s-badge>
-            ) : null}
+        {isVertical ? (
+          <s-stack direction="block" gap="base" alignItems="center">
+            {image}
+            {details}
           </s-stack>
-        ) : null}
-
-        <s-stack direction="block" gap="tight">
-          <s-button variant="primary" inlineSize="fill">
-            {acceptText || "Accept"}
-          </s-button>
-          <s-button variant="tertiary" inlineSize="fill">
-            {declineText || "Decline"}
-          </s-button>
-        </s-stack>
+        ) : (
+          <s-stack direction="inline" gap="base" alignItems="start">
+            {image}
+            {details}
+          </s-stack>
+        )}
       </s-stack>
     </s-box>
   );
