@@ -2,7 +2,12 @@
 // the prop-types runtime checker, so disable that rule for this file.
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
-import { useFetcher, useLoaderData } from "react-router";
+import {
+  useFetcher,
+  useLoaderData,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -117,6 +122,10 @@ export default function OfferSettings() {
   const { config } = useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Which step this editor opened for (from the overview node's Edit button).
+  const step = searchParams.get("step") === "downsell" ? "downsell" : "upsell";
 
   // Reactive mirror of every text/select/number/switch field, so the live
   // preview and status badge update as the merchant edits. Fields themselves
@@ -169,11 +178,11 @@ export default function OfferSettings() {
   // Which collapsible sections are expanded. Collapsing hides via s-box display
   // (not unmount), so the uncontrolled inputs keep any unsaved edits.
   const [open, setOpen] = useState({
-    product: true,
+    product: step === "upsell",
     pricing: false,
     timer: false,
     content: false,
-    downsell: false,
+    downsell: step === "downsell",
     performance: false,
   });
   const toggle = (key) => setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -280,7 +289,15 @@ export default function OfferSettings() {
   );
 
   return (
-    <s-page ref={pageRef} inlineSize="large" heading="Post-purchase offer">
+    <s-page ref={pageRef} inlineSize="large" heading="Edit post-purchase offer">
+      <s-button
+        slot="breadcrumb-actions"
+        variant="tertiary"
+        icon="arrow-left"
+        onClick={() => navigate("/app/settings")}
+      >
+        Overview
+      </s-button>
       <s-button
         slot="primary-action"
         onClick={save}
@@ -311,48 +328,6 @@ export default function OfferSettings() {
               details="When off, buyers go straight to the Thank You page."
             />
           </s-stack>
-        </s-stack>
-      </s-section>
-
-      {/* Funnel flow — Upsell -> accepted / declined -> Downsell (visual overview) */}
-      <s-section heading="Funnel flow">
-        <s-stack direction="block" gap="base" alignItems="center">
-          <FlowNode
-            badge="Upsell · Step 1"
-            badgeTone="info"
-            badgeIcon="cart-sale"
-            product={mainProduct}
-            emptyText="No upsell product selected yet."
-          />
-
-          <s-grid
-            gridTemplateColumns="repeat(2, minmax(0, 1fr))"
-            gap="base"
-            alignItems="start"
-          >
-            <s-grid-item>
-              <s-stack direction="block" gap="tight" alignItems="center">
-                <FlowBranch label="Accepted" tone="success" />
-                <FlowEnd label="Order complete" icon="check-circle" />
-              </s-stack>
-            </s-grid-item>
-            <s-grid-item>
-              <s-stack direction="block" gap="tight" alignItems="center">
-                <FlowBranch label="Declined" tone="critical" />
-                {form.downsellEnabled && downsellProduct ? (
-                  <FlowNode
-                    badge="Downsell · Step 2"
-                    badgeTone="warning"
-                    badgeIcon="cart-down"
-                    product={downsellProduct}
-                    emptyText="No downsell product selected yet."
-                  />
-                ) : (
-                  <FlowEnd label="Thank You page" icon="order-fulfilled" />
-                )}
-              </s-stack>
-            </s-grid-item>
-          </s-grid>
         </s-stack>
       </s-section>
 
@@ -624,75 +599,6 @@ function CollapsibleCard({ icon, title, open, onToggle, children }) {
 // Stat labels mirror RevLift's funnels metrics shown in revlift.mp4
 // (Views, Conversion, Revenue, Rev/Visit). Values are placeholders until
 // analytics tracking is added.
-// ---- Funnel-flow diagram helpers (RevLift-style node cards + labeled arrows) ----
-
-// Compact placeholder stats inside a flow node (real metrics pending the
-// analytics/events task).
-function FlowStats() {
-  return (
-    <s-stack direction="inline" gap="base">
-      <s-text type="small">— views</s-text>
-      <s-text type="small">— revenue</s-text>
-      <s-text type="small">—/visit</s-text>
-      <s-text type="small">— conv.</s-text>
-    </s-stack>
-  );
-}
-
-// A product node in the funnel diagram: label badge + product mini-card + stats.
-function FlowNode({ badge, badgeTone, badgeIcon, product, emptyText }) {
-  return (
-    <s-box
-      padding="base"
-      borderWidth="base"
-      borderRadius="base"
-      background="subdued"
-    >
-      <s-stack direction="block" gap="tight">
-        <s-badge tone={badgeTone} icon={badgeIcon}>
-          {badge}
-        </s-badge>
-        {product ? (
-          <s-stack direction="inline" gap="base" alignItems="center">
-            {product.image ? (
-              <s-thumbnail src={product.image} alt={product.title ?? ""} size="base" />
-            ) : null}
-            <s-stack direction="block" gap="none">
-              <s-text type="strong">{product.title}</s-text>
-              {product.price ? <s-text type="small">{product.price}</s-text> : null}
-            </s-stack>
-          </s-stack>
-        ) : (
-          <s-text type="small">{emptyText}</s-text>
-        )}
-        <FlowStats />
-      </s-stack>
-    </s-box>
-  );
-}
-
-// A labeled branch arrow — green "Accepted" / red "Declined".
-function FlowBranch({ label, tone }) {
-  return (
-    <s-stack direction="block" gap="none" alignItems="center">
-      <s-icon type="arrow-down" tone={tone} />
-      <s-badge tone={tone}>{label}</s-badge>
-    </s-stack>
-  );
-}
-
-// A terminal node — order complete / thank-you.
-function FlowEnd({ label, icon }) {
-  return (
-    <s-box padding="base" borderWidth="base" borderRadius="base">
-      <s-stack direction="inline" gap="tight" alignItems="center">
-        <s-icon type={icon} tone="neutral" />
-        <s-text type="small">{label}</s-text>
-      </s-stack>
-    </s-box>
-  );
-}
-
 const STAT_TILES = [
   { label: "Views", icon: "view" },
   { label: "Conversion", icon: "chart-line" },
@@ -799,6 +705,16 @@ function OfferPreview({
     .toString()
     .padStart(2, "0");
 
+  const savePct =
+    pricing && pricing.savings && pricing.compareAtPrice
+      ? Math.round(
+          (1 -
+            Number.parseFloat(pricing.finalPrice) /
+              Number.parseFloat(pricing.compareAtPrice)) *
+            100,
+        )
+      : null;
+
   return (
     <s-box
       padding="base"
@@ -827,22 +743,24 @@ function OfferPreview({
         <s-text type="strong">{product.title}</s-text>
 
         {pricing ? (
-          <s-stack direction="block" gap="none">
-            <s-stack direction="inline" gap="tight" alignItems="center">
-              {pricing.compareAtPrice ? (
-                <s-text type="redundant">{pricing.compareAtPrice}</s-text>
-              ) : null}
-              <s-text type="strong">{pricing.finalPrice}</s-text>
-            </s-stack>
-            {pricing.savings ? (
-              <s-badge tone="success">You save {pricing.savings}</s-badge>
+          <s-stack direction="inline" gap="base" alignItems="center">
+            {pricing.compareAtPrice ? (
+              <s-text type="redundant">{pricing.compareAtPrice}</s-text>
+            ) : null}
+            <s-text type="strong">{pricing.finalPrice}</s-text>
+            {savePct != null ? (
+              <s-badge tone="success">SAVE {savePct}%</s-badge>
             ) : null}
           </s-stack>
         ) : null}
 
         <s-stack direction="block" gap="tight">
-          <s-button variant="primary">{acceptText || "Accept"}</s-button>
-          <s-button variant="tertiary">{declineText || "Decline"}</s-button>
+          <s-button variant="primary" inlineSize="fill">
+            {acceptText || "Accept"}
+          </s-button>
+          <s-button variant="tertiary" inlineSize="fill">
+            {declineText || "Decline"}
+          </s-button>
         </s-stack>
       </s-stack>
     </s-box>
