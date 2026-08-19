@@ -314,6 +314,48 @@ export default function OfferSettings() {
         </s-stack>
       </s-section>
 
+      {/* Funnel flow — Upsell -> accepted / declined -> Downsell (visual overview) */}
+      <s-section heading="Funnel flow">
+        <s-stack direction="block" gap="base" alignItems="center">
+          <FlowNode
+            badge="Upsell · Step 1"
+            badgeTone="info"
+            badgeIcon="cart-sale"
+            product={mainProduct}
+            emptyText="No upsell product selected yet."
+          />
+
+          <s-grid
+            gridTemplateColumns="repeat(2, minmax(0, 1fr))"
+            gap="base"
+            alignItems="start"
+          >
+            <s-grid-item>
+              <s-stack direction="block" gap="tight" alignItems="center">
+                <FlowBranch label="Accepted" tone="success" />
+                <FlowEnd label="Order complete" icon="check-circle" />
+              </s-stack>
+            </s-grid-item>
+            <s-grid-item>
+              <s-stack direction="block" gap="tight" alignItems="center">
+                <FlowBranch label="Declined" tone="critical" />
+                {form.downsellEnabled && downsellProduct ? (
+                  <FlowNode
+                    badge="Downsell · Step 2"
+                    badgeTone="warning"
+                    badgeIcon="cart-down"
+                    product={downsellProduct}
+                    emptyText="No downsell product selected yet."
+                  />
+                ) : (
+                  <FlowEnd label="Thank You page" icon="order-fulfilled" />
+                )}
+              </s-stack>
+            </s-grid-item>
+          </s-grid>
+        </s-stack>
+      </s-section>
+
       {/* Split-panel editor: collapsible controls (left) + live preview (right) */}
       <s-grid
         gridTemplateColumns="minmax(0, 360px) minmax(0, 1fr)"
@@ -582,6 +624,75 @@ function CollapsibleCard({ icon, title, open, onToggle, children }) {
 // Stat labels mirror RevLift's funnels metrics shown in revlift.mp4
 // (Views, Conversion, Revenue, Rev/Visit). Values are placeholders until
 // analytics tracking is added.
+// ---- Funnel-flow diagram helpers (RevLift-style node cards + labeled arrows) ----
+
+// Compact placeholder stats inside a flow node (real metrics pending the
+// analytics/events task).
+function FlowStats() {
+  return (
+    <s-stack direction="inline" gap="base">
+      <s-text type="small">— views</s-text>
+      <s-text type="small">— revenue</s-text>
+      <s-text type="small">—/visit</s-text>
+      <s-text type="small">— conv.</s-text>
+    </s-stack>
+  );
+}
+
+// A product node in the funnel diagram: label badge + product mini-card + stats.
+function FlowNode({ badge, badgeTone, badgeIcon, product, emptyText }) {
+  return (
+    <s-box
+      padding="base"
+      borderWidth="base"
+      borderRadius="base"
+      background="subdued"
+    >
+      <s-stack direction="block" gap="tight">
+        <s-badge tone={badgeTone} icon={badgeIcon}>
+          {badge}
+        </s-badge>
+        {product ? (
+          <s-stack direction="inline" gap="base" alignItems="center">
+            {product.image ? (
+              <s-thumbnail src={product.image} alt={product.title ?? ""} size="base" />
+            ) : null}
+            <s-stack direction="block" gap="none">
+              <s-text type="strong">{product.title}</s-text>
+              {product.price ? <s-text type="small">{product.price}</s-text> : null}
+            </s-stack>
+          </s-stack>
+        ) : (
+          <s-text type="small">{emptyText}</s-text>
+        )}
+        <FlowStats />
+      </s-stack>
+    </s-box>
+  );
+}
+
+// A labeled branch arrow — green "Accepted" / red "Declined".
+function FlowBranch({ label, tone }) {
+  return (
+    <s-stack direction="block" gap="none" alignItems="center">
+      <s-icon type="arrow-down" tone={tone} />
+      <s-badge tone={tone}>{label}</s-badge>
+    </s-stack>
+  );
+}
+
+// A terminal node — order complete / thank-you.
+function FlowEnd({ label, icon }) {
+  return (
+    <s-box padding="base" borderWidth="base" borderRadius="base">
+      <s-stack direction="inline" gap="tight" alignItems="center">
+        <s-icon type={icon} tone="neutral" />
+        <s-text type="small">{label}</s-text>
+      </s-stack>
+    </s-box>
+  );
+}
+
 const STAT_TILES = [
   { label: "Views", icon: "view" },
   { label: "Conversion", icon: "chart-line" },
