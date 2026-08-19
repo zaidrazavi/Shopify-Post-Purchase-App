@@ -308,19 +308,21 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
           {loading ? (
             <Text subdued>Calculating price…</Text>
           ) : hasSavings ? (
-            <InlineStack spacing="tight">
-              <Text size="large" role="deletion" subdued>
-                {offer.compareAtPrice} {displayCurrency}
-              </Text>
-              <Text size="large" emphasized>
-                {finalPrice} {displayCurrency}
-              </Text>
+            <BlockStack spacing="tight">
+              <InlineStack spacing="tight">
+                <Text size="large" role="deletion" subdued>
+                  {offer.compareAtPrice} {displayCurrency}
+                </Text>
+                <Text size="large" emphasized>
+                  {finalPrice} {displayCurrency}
+                </Text>
+              </InlineStack>
               {savePct != null ? (
                 <Text appearance="success" emphasized>
                   SAVE {savePct}%
                 </Text>
               ) : null}
-            </InlineStack>
+            </BlockStack>
           ) : (
             <Text size="large" emphasized>
               {finalPrice} {displayCurrency}
