@@ -100,6 +100,17 @@ extend("Checkout::PostPurchase::ShouldRender", async ({ inputData, storage }) =>
 // mounted by the reconciler and its hooks run correctly.
 render("Checkout::PostPurchase::Render", (input) => <App {...input} />);
 
+// Discount percentage for the "SAVE X%" badge, derived from the compare-at and
+// final price already in the payload — presentation only, no extra data.
+function savePercent(offer) {
+  const compareAt = Number.parseFloat(offer?.compareAtPrice);
+  const price = Number.parseFloat(offer?.price);
+  if (!Number.isFinite(compareAt) || !Number.isFinite(price) || compareAt <= price) {
+    return null;
+  }
+  return Math.round((1 - price / compareAt) * 100);
+}
+
 // Top-level React component
 export function App({ storage, inputData, calculateChangeset, applyChangeset, done }) {
   // `ShouldRender` stored the full payload: main offer fields at the top level,
@@ -189,6 +200,7 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     calculatedPurchase?.totalOutstandingSet?.presentmentMoney?.currencyCode ?? "";
 
   const hasSavings = Boolean(offer.compareAtPrice && offer.savings);
+  const savePct = savePercent(offer);
   const showCountdown = step === "main" && mainOffer.countdownEnabled;
 
   const minutes = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
@@ -251,11 +263,12 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
 
   return (
     <BlockStack spacing="loose">
-      {/* Countdown / urgency banner — red critical accent (top) */}
+      {/* Green urgency banner with countdown (RevLift "special discount" style) */}
       {showCountdown ? (
-        <Banner status="critical">
+        <Banner status="success">
           <Text emphasized>
-            Special Offer Ends In: {minutes}:{seconds}
+            {minutes}:{seconds} — It&apos;s not too late to add this to your
+            order.
           </Text>
         </Banner>
       ) : null}
@@ -295,19 +308,19 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
           {loading ? (
             <Text subdued>Calculating price…</Text>
           ) : hasSavings ? (
-            <BlockStack spacing="tight">
-              <InlineStack spacing="tight">
-                <Text size="large" role="deletion" subdued>
-                  {offer.compareAtPrice} {displayCurrency}
-                </Text>
-                <Text size="large" emphasized>
-                  {finalPrice} {displayCurrency}
-                </Text>
-              </InlineStack>
-              <Text appearance="success" emphasized>
-                You save {offer.savings} {displayCurrency}
+            <InlineStack spacing="tight">
+              <Text size="large" role="deletion" subdued>
+                {offer.compareAtPrice} {displayCurrency}
               </Text>
-            </BlockStack>
+              <Text size="large" emphasized>
+                {finalPrice} {displayCurrency}
+              </Text>
+              {savePct != null ? (
+                <Text appearance="success" emphasized>
+                  SAVE {savePct}%
+                </Text>
+              ) : null}
+            </InlineStack>
           ) : (
             <Text size="large" emphasized>
               {finalPrice} {displayCurrency}
