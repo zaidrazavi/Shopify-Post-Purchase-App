@@ -1,9 +1,11 @@
 import prisma from "../db.server";
 import {
   CLOSE_BEHAVIORS,
+  DISCOUNT_TYPES,
   FONT_STACKS,
   IMAGE_FITS,
   IMAGE_SIZES,
+  POPUP_LAYOUTS,
   THEME_VARIANTS,
 } from "../lib/popup-options";
 
@@ -48,6 +50,21 @@ export const DEFAULT_POPUP = {
   declineButtonText: "No thanks",
   declineButtonColor: "#6D7175",
   closeButtonBehavior: "decline",
+  // OCU-parity additions (null = use a sensible built-in default)
+  selectorsColor: null,
+  elementsColor: null,
+  inheritStoreFont: false,
+  layout: "media-left",
+  allowSubscription: false,
+  hideIfCartHasSubscription: false,
+  imageBorder: true,
+  autoselectVariant: true,
+  hideQuantitySelector: true,
+  predefinedQuantity: 1,
+  discountType: "none",
+  discountValue: null,
+  acceptButtonHoverColor: null,
+  declineButtonHoverColor: null,
 };
 
 /** Returns the shop's saved popup config, or defaults if none exists yet. */
@@ -79,6 +96,18 @@ function normColor(v, fallback) {
   const s = str(v);
   if (s && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s)) return s.toUpperCase();
   return fallback;
+}
+
+// Like normColor but returns null (not a fallback) for unset/invalid — for the
+// optional OCU color fields where null means "use a built-in default".
+function normColorOrNull(v) {
+  return normColor(v, null);
+}
+
+function normDiscountValue(discountType, raw) {
+  if (discountType === "none") return null;
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function oneOf(v, allowed, fallback) {
@@ -143,44 +172,101 @@ function normalizeInput(input) {
       CLOSE_BEHAVIORS,
       "decline",
     ),
+    // OCU-parity additions
+    selectorsColor: normColorOrNull(input.selectorsColor),
+    elementsColor: normColorOrNull(input.elementsColor),
+    inheritStoreFont: Boolean(input.inheritStoreFont),
+    layout: oneOf(input.layout, POPUP_LAYOUTS, "media-left"),
+    allowSubscription: Boolean(input.allowSubscription),
+    hideIfCartHasSubscription: Boolean(input.hideIfCartHasSubscription),
+    imageBorder: Boolean(input.imageBorder),
+    autoselectVariant: Boolean(input.autoselectVariant),
+    hideQuantitySelector: Boolean(input.hideQuantitySelector),
+    predefinedQuantity: clampInt(input.predefinedQuantity, 1, 999, 1),
+    discountType: oneOf(input.discountType, DISCOUNT_TYPES, "none"),
+    discountValue: normDiscountValue(
+      oneOf(input.discountType, DISCOUNT_TYPES, "none"),
+      input.discountValue,
+    ),
+    acceptButtonHoverColor: normColorOrNull(input.acceptButtonHoverColor),
+    declineButtonHoverColor: normColorOrNull(input.declineButtonHoverColor),
   };
 }
 
-/** compare-at + savings, honoring the show toggles. */
-export function popupSavings(config) {
-  if (!config.showCompareAt) return { compareAtPrice: null, savings: null };
-
-  const compareAt = Number.parseFloat(config.productCompareAtPrice);
-  const price = Number.parseFloat(config.productPrice);
-  if (!Number.isFinite(compareAt) || !Number.isFinite(price) || compareAt <= price) {
-    return { compareAtPrice: null, savings: null };
+/**
+ * Final display price + compare-at + savings, honoring the discount and the show
+ * toggles.
+ *
+ * NOTE: the discounted price is DISPLAY-ONLY. The storefront still adds the
+ * product to the cart at its real Shopify price, so charging a discount requires
+ * a matching Shopify automatic discount / discount code (a separate integration).
+ */
+export function popupPricing(config) {
+  const basePrice = Number.parseFloat(config.productPrice);
+  if (!Number.isFinite(basePrice)) {
+    return {
+      finalPrice: config.productPrice ?? null,
+      compareAtPrice: null,
+      savings: null,
+    };
   }
 
+  const dv = Number.parseFloat(config.discountValue);
+  let finalPrice = basePrice;
+  if (config.discountType === "percentage" && Number.isFinite(dv) && dv > 0) {
+    finalPrice = basePrice * (1 - dv / 100);
+  } else if (config.discountType === "fixed" && Number.isFinite(dv) && dv >= 0) {
+    finalPrice = dv;
+  }
+  finalPrice = Math.max(0, finalPrice);
+
+  // The "was" price to strike through: the product's compare-at when higher than
+  // the final price, otherwise the base price when a discount lowered it.
+  const productCompareAt = Number.parseFloat(config.productCompareAtPrice);
+  let original = null;
+  if (Number.isFinite(productCompareAt) && productCompareAt > finalPrice) {
+    original = productCompareAt;
+  } else if (finalPrice < basePrice) {
+    original = basePrice;
+  }
+
+  const showCompare = Boolean(config.showCompareAt) && original != null;
   return {
-    compareAtPrice: compareAt.toFixed(2),
-    savings: config.showSavings ? (compareAt - price).toFixed(2) : null,
+    finalPrice: finalPrice.toFixed(2),
+    compareAtPrice: showCompare ? original.toFixed(2) : null,
+    savings:
+      showCompare && Boolean(config.showSavings)
+        ? (original - finalPrice).toFixed(2)
+        : null,
   };
 }
 
 /**
  * The public payload the storefront theme fetches. Includes the resolved font
- * stack and computed savings so the theme script doesn't need any of this logic.
+ * stack and computed pricing so the theme script doesn't need any of this logic.
  */
 export function buildPopupPayload(config) {
-  const { compareAtPrice, savings } = popupSavings(config);
+  const { finalPrice, compareAtPrice, savings } = popupPricing(config);
   const ready = Boolean(config.enabled && config.variantId);
 
   return {
     enabled: ready,
     style: {
-      fontFamily: FONT_STACKS[config.fontFamily] ?? FONT_STACKS.system,
+      // inheritStoreFont wins: send null so the theme keeps its own font.
+      fontFamily: config.inheritStoreFont
+        ? null
+        : (FONT_STACKS[config.fontFamily] ?? FONT_STACKS.system),
       fontColor: config.fontColor,
       backgroundColor: config.backgroundColor,
+      selectorsColor: config.selectorsColor ?? null,
+      elementsColor: config.elementsColor ?? null,
       themeVariant: config.themeVariant,
+      layout: config.layout ?? "media-left",
       cornerRadius: config.cornerRadius,
     },
     display: {
       hideIfInCart: Boolean(config.hideIfInCart),
+      hideIfCartHasSubscription: Boolean(config.hideIfCartHasSubscription),
     },
     headline: config.headlineEnabled ? config.headlineText : null,
     subheadline: config.subheadlineEnabled ? config.subheadlineText : null,
@@ -195,17 +281,25 @@ export function buildPopupPayload(config) {
       variantId: config.variantId ? Number(config.variantId) : null,
       title: config.productTitle,
       image: config.productImage,
-      price: config.productPrice,
+      price: finalPrice,
       compareAtPrice,
       savings,
       imageFit: config.imageFit,
       imageSize: config.imageSize,
+      imageBorder: config.imageBorder !== false,
+      autoselectVariant: config.autoselectVariant !== false,
+      hideQuantitySelector: config.hideQuantitySelector !== false,
+      quantity: config.predefinedQuantity ?? 1,
+      // subscribe flow deferred; flag carried through for the future.
+      allowSubscription: Boolean(config.allowSubscription),
     },
     buttons: {
       acceptText: config.acceptButtonText,
       acceptColor: config.acceptButtonColor,
+      acceptHoverColor: config.acceptButtonHoverColor ?? null,
       declineText: config.declineButtonText,
       declineColor: config.declineButtonColor,
+      declineHoverColor: config.declineButtonHoverColor ?? null,
       closeBehavior: config.closeButtonBehavior,
     },
   };

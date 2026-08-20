@@ -288,7 +288,13 @@
     transition: filter 0.15s ease;
   }
 
+  /* Custom hover color when configured (--pcu-accept-hover); otherwise just
+     darken the base color slightly. */
   .pcu-modal__add:hover { filter: brightness(0.94); }
+  .pcu-modal__add[style*="--pcu-accept-hover"]:hover {
+    background: var(--pcu-accept-hover) !important;
+    filter: none;
+  }
 
   .pcu-modal__spinner {
     display: none;
@@ -321,6 +327,9 @@
   }
 
   .pcu-modal__decline:hover { background: #f5f5f5; }
+  .pcu-modal__decline[style*="--pcu-decline-hover"]:hover {
+    background: var(--pcu-decline-hover) !important;
+  }
 
   @keyframes pcu-spin { to { transform: rotate(360deg); } }
 

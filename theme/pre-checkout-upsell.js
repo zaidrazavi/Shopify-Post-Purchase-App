@@ -86,6 +86,13 @@
     });
   }
 
+  // True if any line in the cart is a subscription (has a selling plan).
+  function cartHasSubscription(cart) {
+    return (cart.items || []).some(function (i) {
+      return !!(i.selling_plan_allocation || i.selling_plan);
+    });
+  }
+
   function formatMoney(value) {
     if (value == null || value === '') return '';
     var n = parseFloat(value);
@@ -202,6 +209,10 @@
         if (st.backgroundColor) dialog.style.background = st.backgroundColor;
         if (st.fontColor) dialog.style.color = st.fontColor;
         if (st.cornerRadius != null) dialog.style.borderRadius = st.cornerRadius + 'px';
+        // Expose the accent colors as CSS vars (selectors accent is reserved for a
+        // future variant picker; elements drives dividers/borders).
+        if (st.selectorsColor) dialog.style.setProperty('--pcu-selectors', st.selectorsColor);
+        if (st.elementsColor) dialog.style.setProperty('--pcu-elements', st.elementsColor);
       }
       // The mobile sticky footer needs an opaque background matching the dialog
       // so scrolling content doesn't show through behind the buttons.
@@ -212,6 +223,20 @@
       if (st.fontFamily) modal.style.fontFamily = st.fontFamily;
       var info = modal.querySelector('.pcu-modal__info');
       if (info) info.style.textAlign = st.themeVariant === 'bold' ? 'center' : 'left';
+
+      // Layout: image placement relative to the details. text-only hides media.
+      // (On mobile the CSS forces a single column, so this only affects desktop.)
+      var body = modal.querySelector('.pcu-modal__body');
+      if (body && window.matchMedia && window.matchMedia('(min-width: 750px)').matches) {
+        var layout = st.layout || 'media-left';
+        if (layout === 'media-top') {
+          body.style.flexDirection = 'column';
+        } else if (layout === 'media-right') {
+          body.style.flexDirection = 'row-reverse';
+        } else {
+          body.style.flexDirection = 'row';
+        }
+      }
 
       setTextOrHide(modal.querySelector('[data-pcu-headline]'), cfg.headline);
       setTextOrHide(modal.querySelector('[data-pcu-sub]'), cfg.subheadline);
@@ -232,7 +257,8 @@
 
       var media = modal.querySelector('[data-pcu-media]');
       var img = modal.querySelector('[data-pcu-image]');
-      if (p.image && img) {
+      var textOnly = (st.layout || 'media-left') === 'text-only';
+      if (p.image && img && !textOnly) {
         img.src = p.image;
         img.alt = p.title || '';
         img.style.objectFit = p.imageFit === 'contain' ? 'contain' : 'cover';
@@ -241,6 +267,12 @@
           media.hidden = false;
           var basis = p.imageSize === 'small' ? '32%' : p.imageSize === 'large' ? '56%' : '44%';
           media.style.flex = '0 0 ' + basis;
+          // Optional border around the image, using the elements accent color.
+          if (p.imageBorder) {
+            media.style.border = '0.1rem solid ' + (st.elementsColor || '#e1e3e5');
+          } else {
+            media.style.border = 'none';
+          }
         }
       } else if (media) {
         media.hidden = true;
@@ -260,18 +292,31 @@
         p.savings ? formatMoney(p.savings) + ' Savings' : null
       );
 
+      // Quantity added to cart (predefined). Default 1.
+      var qty = parseInt(p.quantity, 10);
+      modal.setAttribute('data-quantity', String(qty > 0 ? qty : 1));
+
       var b = cfg.buttons || {};
+      // Pill vs. rounded buttons follow the card corner radius.
+      var btnRadius = st.cornerRadius != null ? st.cornerRadius + 'px' : null;
       var addLabel = modal.querySelector('[data-pcu-add-label]');
       if (addLabel && b.acceptText) addLabel.textContent = b.acceptText;
       var addBtn = modal.querySelector('[data-pcu-add]');
-      if (addBtn && b.acceptColor) {
-        addBtn.style.background = b.acceptColor;
-        addBtn.style.color = contrastText(b.acceptColor);
+      if (addBtn) {
+        if (b.acceptColor) {
+          addBtn.style.background = b.acceptColor;
+          addBtn.style.color = contrastText(b.acceptColor);
+        }
+        if (btnRadius) addBtn.style.borderRadius = btnRadius;
+        // Hover color via CSS var (base stylesheet reads --pcu-accept-hover).
+        if (b.acceptHoverColor) addBtn.style.setProperty('--pcu-accept-hover', b.acceptHoverColor);
       }
       var declineBtn = modal.querySelector('[data-pcu-decline]');
       if (declineBtn) {
         if (b.declineText) declineBtn.textContent = b.declineText;
         if (b.declineColor) declineBtn.style.color = b.declineColor;
+        if (btnRadius) declineBtn.style.borderRadius = btnRadius;
+        if (b.declineHoverColor) declineBtn.style.setProperty('--pcu-decline-hover', b.declineHoverColor);
       }
       closeBehavior = b.closeBehavior === 'close' ? 'close' : 'decline';
     }
@@ -346,6 +391,14 @@
           resolveConfig(false);
           return;
         }
+        if (
+          cfg.display &&
+          cfg.display.hideIfCartHasSubscription &&
+          cartHasSubscription(cart)
+        ) {
+          resolveConfig(false);
+          return;
+        }
         applyConfig(cfg);
         resolveConfig(true);
       });
@@ -385,6 +438,7 @@
       addButton.addEventListener('click', function () {
         if (addButton.classList.contains('loading')) return;
         var variantId = parseInt(modal.getAttribute('data-variant-id'), 10);
+        var quantity = parseInt(modal.getAttribute('data-quantity'), 10) || 1;
         var button = pendingButton;
 
         if (!variantId) {
@@ -406,7 +460,7 @@
         fetch(addUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ items: [{ id: variantId, quantity: 1 }] })
+          body: JSON.stringify({ items: [{ id: variantId, quantity: quantity }] })
         })
           .then(function (response) {
             if (!response.ok) {

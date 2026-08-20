@@ -133,6 +133,22 @@ model PrePurchasePopupConfig {
   declineButtonColor  String @default("#6D7175")
   closeButtonBehavior String @default("decline") // "decline" | "close"
 
+  // --- OCU-parity additions (all nullable/additive; null = sensible default) ---
+  selectorsColor            String? // variant selector accent, hex
+  elementsColor             String? // misc UI elements (dividers/borders), hex
+  inheritStoreFont          Boolean? // true = use the theme's font, ignore fontFamily
+  layout                    String? // "media-left" | "media-right" | "media-top" | "text-only"
+  allowSubscription         Boolean? // stored flag (subscribe flow deferred)
+  hideIfCartHasSubscription Boolean? // hide popup if cart already has a subscription
+  imageBorder               Boolean? // draw a border around the product image
+  autoselectVariant         Boolean? // auto-pick the first available variant
+  hideQuantitySelector      Boolean? // hide the qty control
+  predefinedQuantity        Int? // fixed quantity added to cart
+  discountType              String? // "none" | "percentage" | "fixed"
+  discountValue             Float? // percent (0-100) or fixed override price
+  acceptButtonHoverColor    String? // accept button hover color, hex
+  declineButtonHoverColor   String? // decline button hover color, hex
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
