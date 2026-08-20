@@ -1,0 +1,100 @@
+{% comment %}
+  Pre-purchase upsell — Theme App Extension (App embed block)
+  ----------------------------------------------------------
+  Ships with the Drims app. The merchant enables it once in
+  Online Store > Themes > Customize > App embeds ("Pre-purchase Popup").
+  No theme code editing and no manual file copying required.
+
+  CONFIG-DRIVEN: this shell renders on every page (hidden). The bundled
+  assets/pre-purchase-popup.js fetches the merchant's settings from the app
+  (/api/pre-purchase-popup?shop=...) and fills in the product, copy, colors,
+  timer and buttons. If the popup is disabled, no product is configured, or the
+  product is already in the cart, the script never intercepts and checkout
+  proceeds normally.
+
+  The JS + CSS are loaded via asset_url tags below (rather than the schema
+  "javascript"/"stylesheet" keys, which cap each asset at 10 KB — our script is
+  larger). They only load when this embed is enabled in the theme editor.
+{% endcomment %}
+
+<div
+  id="PreCheckoutUpsell"
+  class="pcu-modal"
+  data-shop="{{ shop.permanent_domain }}"
+  data-app-url="https://shopify-post-purchase-app.onrender.com"
+  data-variant-id=""
+  data-timer-seconds="600"
+  hidden
+>
+  <div class="pcu-modal__overlay" data-pcu-dismiss></div>
+
+  <div class="pcu-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="PreCheckoutUpsell-Heading">
+    <button
+      type="button"
+      class="pcu-modal__close"
+      data-pcu-close
+      aria-label="Close"
+    >
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+        <line x1="5" y1="5" x2="19" y2="19"></line>
+        <line x1="19" y1="5" x2="5" y2="19"></line>
+      </svg>
+    </button>
+
+    <div class="pcu-modal__head">
+      <h2 id="PreCheckoutUpsell-Heading" class="pcu-modal__title" data-pcu-headline></h2>
+      <p class="pcu-modal__sub" data-pcu-sub></p>
+    </div>
+
+    <div class="pcu-modal__timerbar" data-pcu-timerbar>
+      Special Offer Ends In: <span class="pcu-modal__timer" data-pcu-timer>10:00</span>
+    </div>
+
+    <div class="pcu-modal__body">
+      <div class="pcu-modal__media" data-pcu-media>
+        {%- # theme-check-disable ImgWidthAndHeight -%}
+        {%- comment -%}
+          No width/height: the product image (and its real dimensions) is
+          injected at runtime by the script, so we can't know them here. The
+          image is sized by CSS (width:100%; height:auto) with object-fit.
+        {%- endcomment -%}
+        <img data-pcu-image alt="" loading="lazy">
+        {%- # theme-check-enable ImgWidthAndHeight -%}
+      </div>
+
+      <div class="pcu-modal__info">
+        <h3 class="pcu-modal__product-title" data-pcu-title></h3>
+
+        <div class="pcu-modal__desc" data-pcu-desc hidden></div>
+
+        <div class="pcu-modal__price-row">
+          <s class="pcu-modal__compare" data-pcu-compare hidden></s>
+          <span class="pcu-modal__amount" data-pcu-amount></span>
+          <span class="pcu-modal__savings" data-pcu-savings hidden></span>
+        </div>
+
+        <div class="pcu-modal__actions">
+          <button type="button" class="pcu-modal__add" data-pcu-add>
+            <span class="pcu-modal__add-label" data-pcu-add-label>Add This Gift To My Order</span>
+            <span class="pcu-modal__spinner" aria-hidden="true"></span>
+          </button>
+
+          <button type="button" class="pcu-modal__decline" data-pcu-decline>
+            I&rsquo;d rather pay full price
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{ 'pre-purchase-popup.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'pre-purchase-popup.js' | asset_url }}" defer="defer"></script>
+
+{% schema %}
+{
+  "name": "Pre-purchase Popup",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}
