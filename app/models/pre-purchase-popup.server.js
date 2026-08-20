@@ -279,6 +279,13 @@ export function buildPopupPayload(config) {
       : null,
     product: {
       variantId: config.variantId ? Number(config.variantId) : null,
+      // Numeric product id (storefront /cart.js exposes product_id), so the
+      // "hide if the upsell product is in the cart" check can match at the
+      // product level — any variant of it — not just the one offered variant.
+      // config.productId is stored as a GID ("gid://shopify/Product/123").
+      productId: config.productId
+        ? Number(String(config.productId).split("/").pop())
+        : null,
       title: config.productTitle,
       image: config.productImage,
       price: finalPrice,

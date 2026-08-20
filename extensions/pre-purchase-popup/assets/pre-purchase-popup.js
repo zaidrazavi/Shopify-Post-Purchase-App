@@ -123,11 +123,33 @@
     });
   }
 
+  function cartHasProduct(cart, productId) {
+    return (cart.items || []).some(function (i) {
+      return String(i.product_id) === String(productId);
+    });
+  }
+
   // True if any line in the cart is a subscription (has a selling plan).
   function cartHasSubscription(cart) {
     return (cart.items || []).some(function (i) {
       return !!(i.selling_plan_allocation || i.selling_plan);
     });
+  }
+
+  // Decide, against the CURRENT cart, whether the popup should be suppressed.
+  // Evaluated per checkout click (not once at page load), so it reflects items
+  // the shopper added after the page loaded.
+  function shouldHideForCart(cfg, cart) {
+    var d = (cfg && cfg.display) || {};
+    var p = (cfg && cfg.product) || {};
+    if (d.hideIfInCart) {
+      // Product-level match (any variant of the offered product). Fall back to
+      // the variant id only for older payloads that don't carry a productId.
+      if (p.productId != null && cartHasProduct(cart, p.productId)) return true;
+      if (p.productId == null && p.variantId != null && cartHasVariant(cart, p.variantId)) return true;
+    }
+    if (d.hideIfCartHasSubscription && cartHasSubscription(cart)) return true;
+    return false;
   }
 
   function formatMoney(value) {
@@ -185,6 +207,8 @@
     var pendingButton = null;
     var closeTimer = null;
     var countdownInterval = null;
+    // The resolved config, kept so the per-click cart re-check can read it.
+    var activeCfg = null;
 
     function openModal(button) {
       if (!modal) return;
@@ -361,8 +385,22 @@
       closeBehavior = b.closeBehavior === 'close' ? 'close' : 'decline';
     }
 
+    // Checkout clicked while armed: re-fetch the CURRENT cart and decide whether
+    // to show. The page-load cart snapshot is stale if the shopper added items
+    // after load, so the hide-if-in-cart / hide-if-subscription checks must run
+    // against a fresh cart here rather than once at load.
+    function armedClick(button) {
+      getCart().then(function (cart) {
+        if (shouldHideForCart(activeCfg, cart)) {
+          proceedToCheckout(button); // already in cart (or a sub) — skip the popup
+        } else {
+          openModal(button);
+        }
+      });
+    }
+
     // Resolve the loading state once. If a checkout click is being held, act on
-    // it now (open the popup, or let checkout proceed).
+    // it now (re-check the cart and open, or let checkout proceed).
     function resolveConfig(armed) {
       if (configStatus !== 'loading') return; // already decided
       configStatus = armed ? 'armed' : 'off';
@@ -374,7 +412,7 @@
         var b = heldButton;
         heldButton = null;
         if (armed) {
-          openModal(b);
+          armedClick(b);
         } else {
           proceedToCheckout(b);
         }
@@ -404,8 +442,11 @@
         return;
       }
 
-      // Fetch config and cart in parallel so we're armed as soon as possible.
-      var configReq = fetch(
+      // Fetch the config only. We arm as long as there's an offer; whether to
+      // actually SHOW it (hide-if-in-cart / hide-if-subscription) is decided per
+      // checkout click against a fresh cart in armedClick(), so a cart that
+      // changes after page load is always evaluated correctly.
+      fetch(
         appUrl + '/api/pre-purchase-popup?shop=' + encodeURIComponent(shop),
         { method: 'GET' }
       )
@@ -414,34 +455,16 @@
         })
         .catch(function () {
           return null;
+        })
+        .then(function (cfg) {
+          if (!cfg || !cfg.enabled || !cfg.product || !cfg.product.variantId) {
+            resolveConfig(false);
+            return;
+          }
+          activeCfg = cfg;
+          applyConfig(cfg);
+          resolveConfig(true);
         });
-
-      Promise.all([configReq, getCart()]).then(function (results) {
-        var cfg = results[0];
-        var cart = results[1];
-        if (!cfg || !cfg.enabled || !cfg.product || !cfg.product.variantId) {
-          resolveConfig(false);
-          return;
-        }
-        if (
-          cfg.display &&
-          cfg.display.hideIfInCart &&
-          cartHasVariant(cart, cfg.product.variantId)
-        ) {
-          resolveConfig(false);
-          return;
-        }
-        if (
-          cfg.display &&
-          cfg.display.hideIfCartHasSubscription &&
-          cartHasSubscription(cart)
-        ) {
-          resolveConfig(false);
-          return;
-        }
-        applyConfig(cfg);
-        resolveConfig(true);
-      });
     }
 
     // Delegate on the document in the CAPTURE phase — survives Section-Rendering re-renders
@@ -461,7 +484,7 @@
         event.stopImmediatePropagation();
 
         if (configStatus === 'armed') {
-          openModal(button);
+          armedClick(button); // re-check the live cart, then open or proceed
         } else {
           holdClick(button); // still loading — hold until config resolves
         }
