@@ -48,6 +48,15 @@ export function previewPricing(product, discountType, discountValue, showCompare
   };
 }
 
+// Prepend a currency symbol to an already-formatted amount string ("50.00").
+// The admin preview has no shop-currency context, so it assumes "$". The
+// storefront popup uses Shopify.formatMoney (shop's real currency) instead.
+// FUTURE: thread the shop's currency/money format through for non-USD stores.
+function money(v) {
+  if (v == null || v === "") return "";
+  return `$${v}`;
+}
+
 // Pick black or white text for readability on a given background color.
 function contrastText(hex) {
   const c = String(hex || "").replace("#", "");
@@ -292,12 +301,12 @@ export function PopupPreview({ form, product, device }) {
                 >
                   {pricing?.compareAtPrice ? (
                     <span style={{ textDecoration: "line-through", opacity: 0.6 }}>
-                      {pricing.compareAtPrice}
+                      {money(pricing.compareAtPrice)}
                     </span>
                   ) : null}
                   {product?.price ? (
                     <span style={{ fontSize: 18, fontWeight: 700 }}>
-                      {pricing ? pricing.finalPrice : product.price}
+                      {pricing ? money(pricing.finalPrice) : money(product.price)}
                     </span>
                   ) : null}
                 </div>
@@ -310,7 +319,7 @@ export function PopupPreview({ form, product, device }) {
                       marginTop: 4,
                     }}
                   >
-                    {pricing.savings} Savings
+                    {money(pricing.savings)} Savings
                   </div>
                 ) : null}
               </div>

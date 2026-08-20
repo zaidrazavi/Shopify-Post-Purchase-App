@@ -104,7 +104,10 @@
         /* fall through */
       }
     }
-    return n.toFixed(2);
+    // Fallback when Shopify.formatMoney is unavailable: prepend "$".
+    // FUTURE: for non-USD stores without formatMoney, thread the shop's
+    // currency symbol/format through the config payload.
+    return '$' + n.toFixed(2);
   }
 
   function setTextOrHide(el, text) {
