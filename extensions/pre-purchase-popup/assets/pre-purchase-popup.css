@@ -16,7 +16,11 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 1.5rem;
-  font-family: var(--font-body-family);
+  /* Inherit the storefront's font from <body> so the popup matches the theme
+     when "Inherit store font" is on. Theme-agnostic (no dependency on Dawn's
+     --font-body-family variable). When the toggle is OFF, the script sets an
+     explicit font-family inline on this element, which overrides this. */
+  font-family: inherit;
 }
 
 .pcu-modal__overlay {
@@ -205,6 +209,9 @@
   padding: 1.4rem 1.6rem;
   background: #ef6e7b;
   color: #ffffff;
+  /* Buttons don't inherit font-family by default (UA stylesheet), so force it
+     to follow the popup's font instead of the browser default (Arial). */
+  font-family: inherit;
   font-size: 1.6rem;
   font-weight: 700;
   border: none;
@@ -243,6 +250,8 @@
   padding: 1.3rem 1.6rem;
   background: #ffffff;
   color: #333333;
+  /* Same as the accept button: buttons don't inherit font-family by default. */
+  font-family: inherit;
   font-size: 1.5rem;
   font-weight: 500;
   border: 0.1rem solid #cccccc;
