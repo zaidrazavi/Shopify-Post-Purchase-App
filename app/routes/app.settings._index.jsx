@@ -1,192 +1,177 @@
-// Overview for the post-purchase offer — a RevLift-style funnel-flow tree.
-// Read-only: it shows the Upsell/Downsell nodes and links to the full editor
-// (app.settings.edit) per step. No data mutation happens here.
+// General settings (new admin design). Repurposed from the old Polaris
+// post-purchase overview — post-purchase is now handled by the funnel system,
+// so /app/settings is the store's General settings page the new nav points to.
+// The old Polaris offer editor still lives at /app/settings/edit (untouched).
 /* eslint-disable react/prop-types */
-import { useLoaderData, useNavigate } from "react-router";
-import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useEffect, useState } from "react";
+import { useLoaderData, useNavigate, useFetcher } from "react-router";
+import { toast } from "sonner";
 import { authenticate } from "../shopify.server";
-import { getOfferConfig } from "../models/offer.server";
+import { getStore, updateStore } from "../models/store.server";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Save, CreditCard } from "lucide-react";
+
+const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD", "INR", "JPY", "BRL"];
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-  const config = await getOfferConfig(session.shop);
-  return { config };
+  const shop = session.shop;
+
+  let store = null;
+  try {
+    store = await getStore(shop);
+  } catch {
+    // Store table may not exist yet (pre-migration) — render defaults.
+  }
+
+  return {
+    shop,
+    store: store
+      ? {
+          storeName: store.storeName ?? "",
+          storeEmail: store.storeEmail ?? "",
+          currency: store.currency ?? "USD",
+          currentPlan: store.currentPlan ?? "FREE",
+          isInternal: Boolean(store.isInternal),
+        }
+      : { storeName: "", storeEmail: "", currency: "USD", currentPlan: "FREE", isInternal: false },
+  };
 };
 
-export default function OfferOverview() {
-  const { config } = useLoaderData();
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const form = await request.formData();
+  try {
+    const currencyRaw = form.get("currency")?.toString();
+    const data = {
+      storeName: form.get("storeName")?.toString().trim() || null,
+      storeEmail: form.get("storeEmail")?.toString().trim() || null,
+      currency: CURRENCIES.includes(currencyRaw) ? currencyRaw : "USD",
+    };
+    await updateStore(session.shop, data);
+    return { ok: true, message: "Settings saved" };
+  } catch (error) {
+    return { ok: false, error: error?.message || "Save failed" };
+  }
+};
+
+function ReadonlyRow({ label, value, children }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      {children ?? <p className="font-medium text-foreground">{value || "—"}</p>}
+    </div>
+  );
+}
+
+export default function GeneralSettings() {
+  const { shop, store } = useLoaderData();
   const navigate = useNavigate();
+  const fetcher = useFetcher();
 
-  const mainProduct = config.variantId
-    ? {
-        title: config.productTitle,
-        image: config.productImage,
-        price: config.productPrice,
-      }
-    : null;
-  const downsellProduct = config.downsellVariantId
-    ? {
-        title: config.downsellProductTitle,
-        image: config.downsellProductImage,
-        price: config.downsellProductPrice,
-      }
-    : null;
+  const [storeName, setStoreName] = useState(store.storeName);
+  const [storeEmail, setStoreEmail] = useState(store.storeEmail);
+  const [currency, setCurrency] = useState(store.currency);
 
-  const isLive = Boolean(config.enabled && config.variantId);
-  const downsellActive = Boolean(
-    config.downsellEnabled && config.downsellVariantId,
-  );
+  const busy = fetcher.state !== "idle";
 
-  const editUpsell = () => navigate("/app/settings/edit?step=upsell");
-  const editDownsell = () => navigate("/app/settings/edit?step=downsell");
+  useEffect(() => {
+    if (!fetcher.data) return;
+    if (fetcher.data.ok) toast.success(fetcher.data.message || "Saved");
+    else if (fetcher.data.error) toast.error(fetcher.data.error);
+  }, [fetcher.data]);
+
+  const save = () =>
+    fetcher.submit({ storeName, storeEmail, currency }, { method: "post" });
 
   return (
-    <s-page heading="Post-purchase offer">
-      <s-button slot="primary-action" icon="edit" onClick={editUpsell}>
-        Edit offer
-      </s-button>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">General Settings</h1>
+        <p className="text-muted-foreground">Manage your store configuration</p>
+      </div>
 
-      {/* Status */}
-      <s-section>
-        <s-stack direction="inline" gap="base" alignItems="center">
-          <s-badge
-            tone={isLive ? "success" : "neutral"}
-            icon={isLive ? "check-circle" : "disabled"}
-          >
-            {isLive ? "Offer is Live" : "Offer is Off"}
-          </s-badge>
-          <s-text>
-            Shown after checkout completes. Edit a step below to configure it.
-          </s-text>
-        </s-stack>
-      </s-section>
+      {/* Store info (read-only) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">Store</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          <ReadonlyRow label="Store Domain" value={shop} />
+          <ReadonlyRow label="Current Plan">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">{store.currentPlan}</Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => navigate("/app/settings/billing")}
+              >
+                <CreditCard className="h-3.5 w-3.5 mr-1.5" />
+                Manage
+              </Button>
+            </div>
+          </ReadonlyRow>
+          <ReadonlyRow label="Internal Store">
+            <Badge variant={store.isInternal ? "default" : "outline"}>
+              {store.isInternal ? "Yes (free forever)" : "No"}
+            </Badge>
+          </ReadonlyRow>
+        </CardContent>
+      </Card>
 
-      {/* Funnel flow — Upsell -> accepted / declined -> Downsell */}
-      <s-section heading="Funnel flow">
-        <s-stack direction="block" gap="base" alignItems="center">
-          <FlowNode
-            badge="Upsell · Step 1"
-            badgeTone="info"
-            badgeIcon="cart-sale"
-            product={mainProduct}
-            emptyText="No upsell product selected yet."
-            onEdit={editUpsell}
-          />
-
-          <s-grid
-            gridTemplateColumns="repeat(2, minmax(0, 1fr))"
-            gap="base"
-            alignItems="start"
-          >
-            <s-grid-item>
-              <s-stack direction="block" gap="tight" alignItems="center">
-                <FlowBranch label="Accepted" tone="success" />
-                <FlowEnd label="Order complete" icon="check-circle" />
-              </s-stack>
-            </s-grid-item>
-            <s-grid-item>
-              <s-stack direction="block" gap="tight" alignItems="center">
-                <FlowBranch label="Declined" tone="critical" />
-                {downsellActive ? (
-                  <FlowNode
-                    badge="Downsell · Step 2"
-                    badgeTone="warning"
-                    badgeIcon="cart-down"
-                    product={downsellProduct}
-                    emptyText="No downsell product selected yet."
-                    onEdit={editDownsell}
-                  />
-                ) : (
-                  <FlowEnd label="Thank You page" icon="order-fulfilled" />
-                )}
-              </s-stack>
-            </s-grid-item>
-          </s-grid>
-        </s-stack>
-      </s-section>
-    </s-page>
+      {/* Editable preferences */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">Preferences</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Store name</Label>
+              <Input value={storeName} onChange={(e) => setStoreName(e.target.value)} className="h-9" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Contact email</Label>
+              <Input
+                type="email"
+                value={storeEmail}
+                onChange={(e) => setStoreEmail(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Currency</Label>
+              <Select value={currency} onValueChange={setCurrency}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Used to format revenue across the app.</p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={save} disabled={busy}>
+              <Save className="h-4 w-4 mr-2" />
+              {busy ? "Saving..." : "Save changes"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
-
-// ---- Funnel-flow diagram helpers (node cards + labeled arrows) ----
-
-// Compact placeholder stats inside a flow node (real metrics pending the
-// analytics/events task).
-function FlowStats() {
-  return (
-    <s-stack direction="inline" gap="base">
-      <s-text type="small">— views</s-text>
-      <s-text type="small">— revenue</s-text>
-      <s-text type="small">—/visit</s-text>
-      <s-text type="small">— conv.</s-text>
-    </s-stack>
-  );
-}
-
-// A product node: label badge + Edit button + product mini-card + stats.
-function FlowNode({ badge, badgeTone, badgeIcon, product, emptyText, onEdit }) {
-  return (
-    <s-box
-      padding="base"
-      borderWidth="base"
-      borderRadius="base"
-      background="subdued"
-    >
-      <s-stack direction="block" gap="tight">
-        <s-stack
-          direction="inline"
-          gap="base"
-          alignItems="center"
-          justifyContent="space-between"
-        >
-          <s-badge tone={badgeTone} icon={badgeIcon}>
-            {badge}
-          </s-badge>
-          <s-button variant="tertiary" icon="edit" onClick={onEdit}>
-            Edit
-          </s-button>
-        </s-stack>
-        {product ? (
-          <s-stack direction="inline" gap="base" alignItems="center">
-            {product.image ? (
-              <s-thumbnail src={product.image} alt={product.title ?? ""} size="base" />
-            ) : null}
-            <s-stack direction="block" gap="none">
-              <s-text type="strong">{product.title}</s-text>
-              {product.price ? <s-text type="small">{product.price}</s-text> : null}
-            </s-stack>
-          </s-stack>
-        ) : (
-          <s-text type="small">{emptyText}</s-text>
-        )}
-        <FlowStats />
-      </s-stack>
-    </s-box>
-  );
-}
-
-// A labeled branch arrow — green "Accepted" / red "Declined".
-function FlowBranch({ label, tone }) {
-  return (
-    <s-stack direction="block" gap="none" alignItems="center">
-      <s-icon type="arrow-down" tone={tone} />
-      <s-badge tone={tone}>{label}</s-badge>
-    </s-stack>
-  );
-}
-
-// A terminal node — order complete / thank-you.
-function FlowEnd({ label, icon }) {
-  return (
-    <s-box padding="base" borderWidth="base" borderRadius="base">
-      <s-stack direction="inline" gap="tight" alignItems="center">
-        <s-icon type={icon} tone="neutral" />
-        <s-text type="small">{label}</s-text>
-      </s-stack>
-    </s-box>
-  );
-}
-
-export const headers = (headersArgs) => {
-  return boundary.headers(headersArgs);
-};

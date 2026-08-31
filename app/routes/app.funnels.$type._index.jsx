@@ -250,10 +250,14 @@ export default function FunnelList() {
             </TableHeader>
             <TableBody>
               {filtered.map((funnel) => {
-                // Placeholder metrics — real values come from events in Phase 5.
-                const views = 0;
-                const conversion = 0;
-                const revenue = 0;
+                // Metrics derived from the Event table (single source of truth),
+                // provided by getFunnels.
+                const views = funnel.impressions ?? 0;
+                const revenue = funnel.revenue ?? 0;
+                const conversion =
+                  views > 0
+                    ? Number((((funnel.conversions ?? 0) / views) * 100).toFixed(2))
+                    : 0;
 
                 return (
                   <TableRow

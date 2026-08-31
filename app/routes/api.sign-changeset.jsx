@@ -6,6 +6,7 @@ import {
   buildOfferChanges,
   getOfferConfig,
   isOfferReady,
+  offerDisplayPrice,
   pickOffer,
   resolveShopDomain,
 } from "../models/offer.server";
@@ -14,6 +15,7 @@ import {
   offerConfigShapeFromFunnel,
   resolvePostPurchaseOffer,
 } from "../models/funnel-resolver.server";
+import { recordEventDeduped } from "../models/event.server";
 
 /**
  * Signs a post-purchase changeset so the extension can apply it.
@@ -57,8 +59,11 @@ export const action = async ({ request }) => {
   // gidToNumericId inside the shape builder; changes are rebuilt here, never
   // trusted from the client.
   let offer;
+  let resolved = null;
+  let newModel = false;
   if (await hasNewFunnelOfType(shop, "post-purchase")) {
-    const resolved = await resolvePostPurchaseOffer(shop);
+    newModel = true;
+    resolved = await resolvePostPurchaseOffer(shop);
     offer = resolved ? pickOffer(offerConfigShapeFromFunnel(resolved), kind) : null;
   } else {
     const config = await getOfferConfig(shop);
@@ -85,6 +90,28 @@ export const action = async ({ request }) => {
   const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .sign(secret);
+
+  // Record a post-purchase conversion + revenue — ONLY on the new-model path.
+  // Fire-and-forget AFTER signing, so it can never delay or block the token.
+  // Revenue uses the SAME price/discount math the changeset was built from
+  // (offerDisplayPrice). Deduped by referenceId so accept retries don't double
+  // count. offer ids come from the resolved funnel/offer (the shape drops ids).
+  if (newModel && resolved) {
+    const offerRow = kind === "downsell" ? resolved.downsell : resolved.main;
+    if (offerRow) {
+      const rev = Number(offerDisplayPrice(offer));
+      void recordEventDeduped({
+        shop,
+        type: "conversion",
+        funnelId: resolved.funnel.id,
+        offerId: offerRow.id,
+        variantId: offer.variantId ?? null,
+        orderId: referenceId ?? null,
+        revenue: Number.isFinite(rev) ? rev : null,
+        metadata: { kind, source: "sign-changeset" },
+      });
+    }
+  }
 
   return cors(Response.json({ token }));
 };

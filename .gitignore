@@ -20,6 +20,9 @@ database.sqlite
 # Scratch theme pulls (shopify theme pull) — not part of the app repo
 /_theme-*/
 
+# Dev-only scripts (equivalence/event proofs, loaders) — never shipped
+/scripts/
+
 
 
 

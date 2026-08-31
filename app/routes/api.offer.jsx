@@ -10,6 +10,7 @@ import {
   offerConfigShapeFromFunnel,
   resolvePostPurchaseOffer,
 } from "../models/funnel-resolver.server";
+import { recordEventDeduped } from "../models/event.server";
 
 /**
  * Returns the current offer configuration for the shop, so the post-purchase
@@ -41,8 +42,11 @@ export const action = async ({ request }) => {
   // serves it (even if the active offer resolves to null → disabled payload).
   // Otherwise fall back to the legacy OfferConfig, byte-for-byte unchanged.
   let payload;
+  let resolved = null;
+  let newModel = false;
   if (await hasNewFunnelOfType(shop, "post-purchase")) {
-    const resolved = await resolvePostPurchaseOffer(shop);
+    newModel = true;
+    resolved = await resolvePostPurchaseOffer(shop);
     payload = resolved
       ? buildOfferPayload(offerConfigShapeFromFunnel(resolved))
       : { enabled: false };
@@ -59,6 +63,23 @@ export const action = async ({ request }) => {
     `[post-purchase] /api/offer HIT shop=${shop} enabled=${payload.enabled} ` +
       `variantId=${payload.variantId ?? "none"} downsell=${payload.downsell ? "yes" : "no"} ref=${ref}`,
   );
+
+  // Record a post-purchase "served" impression — ONLY on the new-model path
+  // (legacy fallback has no offer to attribute to). Fire-and-forget: not awaited,
+  // never blocks the response; the offer payload returns exactly as fast as
+  // before. Deduped by referenceId (the order ref) so ShouldRender retries don't
+  // double-count; if referenceId is absent it inserts anyway (looser).
+  if (newModel && resolved?.main && payload.enabled) {
+    void recordEventDeduped({
+      shop,
+      type: "impression",
+      funnelId: resolved.funnel.id,
+      offerId: resolved.main.id,
+      variantId: payload.variantId ?? null,
+      orderId: body?.referenceId ?? null,
+      metadata: { section: resolved.main.section, source: "api.offer" },
+    });
+  }
 
   return cors(Response.json(payload));
 };
