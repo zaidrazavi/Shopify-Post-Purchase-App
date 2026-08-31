@@ -1,31 +1,35 @@
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
+import { NavMenu } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { AppLayout } from "../components/AppLayout";
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
-
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
 export default function App() {
   const { apiKey } = useLoaderData();
-
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <s-app-nav>
-        <s-link href="/app">Dashboard</s-link>
-        <s-link href="/app/checkout-popup">Pre-purchase</s-link>
-        <s-link href="/app/settings">Post-purchase</s-link>
-      </s-app-nav>
-      <Outlet />
+      {/* Shopify admin's native left-nav menu (App Bridge). The first link must
+          have rel="home". This is IN ADDITION to the in-app AppSidebar. */}
+      <NavMenu>
+        <a href="/app" rel="home">Dashboard</a>
+        <a href="/app/funnels/pre-purchase">Pre-Purchase</a>
+        <a href="/app/funnels/post-purchase">Post-Purchase</a>
+        <a href="/app/funnels/thank-you">Thank You</a>
+        <a href="/app/analytics">Analytics</a>
+        <a href="/app/settings">Settings</a>
+      </NavMenu>
+      <AppLayout />
     </AppProvider>
   );
 }
 
-// Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
   return boundary.error(useRouteError());
 }

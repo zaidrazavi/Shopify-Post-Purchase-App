@@ -88,6 +88,24 @@ module.exports = {
       env: {
         node: true,
       },
+      rules: {
+        // Allow the "omit fields via rest destructuring" idiom, e.g.
+        //   const { id, createdAt, ...rest } = row;
+        "no-unused-vars": ["error", { ignoreRestSiblings: true }],
+      },
+    },
+
+    // Presentational components (vendored shadcn/ui, the layout/sidebar, and
+    // their hooks): ported from upstream and intentionally don't declare
+    // prop-types.
+    {
+      files: ["app/components/**/*.{js,jsx}", "app/hooks/**/*.{js,jsx}"],
+      rules: {
+        "react/prop-types": "off",
+        // CardTitle etc. receive their heading content via {...props}, which
+        // this rule can't see statically.
+        "jsx-a11y/heading-has-content": "off",
+      },
     },
   ],
   globals: {

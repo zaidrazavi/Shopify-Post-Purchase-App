@@ -5,6 +5,11 @@ import {
   getOfferConfig,
   resolveShopDomain,
 } from "../models/offer.server";
+import {
+  hasNewFunnelOfType,
+  offerConfigShapeFromFunnel,
+  resolvePostPurchaseOffer,
+} from "../models/funnel-resolver.server";
 
 /**
  * Returns the current offer configuration for the shop, so the post-purchase
@@ -32,8 +37,19 @@ export const action = async ({ request }) => {
     return cors(Response.json({ enabled: false }));
   }
 
-  const config = await getOfferConfig(shop);
-  const payload = buildOfferPayload(config);
+  // Ownership rule: if this shop has ANY post-purchase funnel, the new model
+  // serves it (even if the active offer resolves to null → disabled payload).
+  // Otherwise fall back to the legacy OfferConfig, byte-for-byte unchanged.
+  let payload;
+  if (await hasNewFunnelOfType(shop, "post-purchase")) {
+    const resolved = await resolvePostPurchaseOffer(shop);
+    payload = resolved
+      ? buildOfferPayload(offerConfigShapeFromFunnel(resolved))
+      : { enabled: false };
+  } else {
+    const config = await getOfferConfig(shop);
+    payload = buildOfferPayload(config);
+  }
 
   // Presence of this line in the Render logs proves Shopify actually called the
   // extension's ShouldRender network fetch. `enabled=true` means we returned a

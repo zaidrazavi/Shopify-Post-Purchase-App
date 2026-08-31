@@ -3,6 +3,11 @@ import {
   getPopupConfig,
   normalizePublicShop,
 } from "../models/pre-purchase-popup.server";
+import {
+  hasNewFunnelOfType,
+  popupConfigShapeFromOffer,
+  resolvePrePurchaseOffer,
+} from "../models/funnel-resolver.server";
 
 /**
  * Public, unauthenticated config feed for the storefront theme's pre-purchase
@@ -41,6 +46,18 @@ export const loader = async ({ request }) => {
   const shop = normalizePublicShop(url.searchParams.get("shop"));
   if (!shop) {
     return json({ enabled: false }, 200);
+  }
+
+  // Ownership rule: if this shop has ANY pre-purchase funnel, the new model
+  // serves it (null active offer → disabled payload). Otherwise fall back to the
+  // legacy PrePurchasePopupConfig, byte-for-byte unchanged.
+  if (await hasNewFunnelOfType(shop, "pre-purchase")) {
+    const resolved = await resolvePrePurchaseOffer(shop);
+    return json(
+      resolved
+        ? buildPopupPayload(popupConfigShapeFromOffer(resolved.offer))
+        : { enabled: false },
+    );
   }
 
   const config = await getPopupConfig(shop);

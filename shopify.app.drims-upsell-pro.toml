@@ -36,3 +36,6 @@ api_version = "2026-10"
     "shop/redact",
   ]
   uri = "/webhooks/compliance"
+
+[build]
+automatically_update_urls_on_dev = true

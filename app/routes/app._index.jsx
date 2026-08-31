@@ -1,138 +1,152 @@
 // Local presentational helpers take plain props; this project doesn't use the
 // prop-types runtime checker, so disable that rule for this file.
 /* eslint-disable react/prop-types */
-import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
+import { getDashboardMetrics } from "../models/metrics.server";
+import { getStore } from "../models/store.server";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { DollarSign, ShoppingCart, TrendingUp, BarChart3 } from "lucide-react";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-  return null;
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
+
+  // getDashboardMetrics self-guards (returns zeros if the Phase 2 tables don't
+  // exist yet). Currency comes from the Store row when available.
+  const metrics = await getDashboardMetrics(shop, 30);
+  let currency = "USD";
+  try {
+    const store = await getStore(shop);
+    if (store?.currency) currency = store.currency;
+  } catch {
+    // Store table may not exist yet (pre Phase 2 migration) — default USD.
+  }
+
+  return { metrics, currency };
 };
 
-// KPI cards mirror RevLift's dashboard (revlift.mp4). Values are placeholders
-// until analytics tracking is added (a separate, deferred task).
-const KPIS = [
-  { label: "Revenue", icon: "cash-dollar" },
-  { label: "Conversions", icon: "chart-line" },
-  { label: "Avg Upsell Value", icon: "receipt-dollar" },
-  { label: "Active Funnels", icon: "chart-funnel" },
-];
-
-// Read-only overview of our two live surfaces (we don't have RevLift's
-// multi-funnel model, so this is a static 2-row table, not a dynamic list).
-const SURFACES = [
-  { name: "Post-purchase offer", href: "/app/settings" },
-  { name: "Checkout popup", href: "/app/checkout-popup" },
-];
-
-export default function Index() {
+function MetricCard({ label, value, sub, icon: Icon }) {
   return (
-    <s-page heading="Dashboard">
-      {/* KPI summary cards */}
-      <s-section>
-        <s-stack direction="block" gap="base">
-          <s-grid gridTemplateColumns="repeat(4, minmax(0, 1fr))" gap="base">
-            {KPIS.map((k) => (
-              <KpiCard key={k.label} label={k.label} icon={k.icon} />
-            ))}
-          </s-grid>
-          <s-stack direction="inline" gap="tight" alignItems="center">
-            <s-badge tone="info" icon="clock">
-              Coming soon
-            </s-badge>
-            <s-text type="small">
-              Live metrics appear here once analytics tracking is added.
-            </s-text>
-          </s-stack>
-        </s-stack>
-      </s-section>
-
-      {/* Revenue overview — placeholder (no analytics data yet) */}
-      <s-section heading="Revenue overview">
-        <s-box
-          padding="large"
-          borderWidth="base"
-          borderRadius="base"
-          background="subdued"
-        >
-          <s-stack direction="block" gap="tight" alignItems="center">
-            <s-icon type="chart-line" tone="neutral" size="large" />
-            <s-text type="strong">Analytics coming soon</s-text>
-            <s-text type="small">
-              Revenue over time will chart here once tracking is added.
-            </s-text>
-          </s-stack>
-        </s-box>
-      </s-section>
-
-      {/* Surfaces overview — read-only table echoing RevLift's funnels list */}
-      <s-section heading="Your surfaces">
-        <s-table>
-          <s-table-header-row>
-            <s-table-header>Name</s-table-header>
-            <s-table-header>Status</s-table-header>
-            <s-table-header>Views</s-table-header>
-            <s-table-header>Conversion</s-table-header>
-            <s-table-header>Revenue</s-table-header>
-            <s-table-header>Rev/Visit</s-table-header>
-            <s-table-header>Actions</s-table-header>
-          </s-table-header-row>
-          <s-table-body>
-            {SURFACES.map((surface) => (
-              <s-table-row key={surface.name}>
-                <s-table-cell>
-                  <s-text type="strong">{surface.name}</s-text>
-                </s-table-cell>
-                <s-table-cell>
-                  <s-badge tone="neutral">Configure →</s-badge>
-                </s-table-cell>
-                <s-table-cell>—</s-table-cell>
-                <s-table-cell>—</s-table-cell>
-                <s-table-cell>—</s-table-cell>
-                <s-table-cell>—</s-table-cell>
-                <s-table-cell>
-                  <s-link href={surface.href}>Edit</s-link>
-                </s-table-cell>
-              </s-table-row>
-            ))}
-          </s-table-body>
-        </s-table>
-      </s-section>
-
-      {/* Getting started (aside) */}
-      <s-section slot="aside" heading="Getting started">
-        <s-paragraph>
-          Configure your{" "}
-          <s-link href="/app/settings">post-purchase offer</s-link> and{" "}
-          <s-link href="/app/checkout-popup">checkout popup</s-link>: pick a
-          product, customize the copy and styling, then enable it.
-        </s-paragraph>
-      </s-section>
-    </s-page>
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+          <Icon className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{sub}</p>
+      </CardContent>
+    </Card>
   );
 }
 
-// Placeholder KPI card — icon + label + em-dash value (real numbers pending
-// the analytics/events task).
-function KpiCard({ label, icon }) {
+export default function Dashboard() {
+  const { metrics, currency } = useLoaderData();
+
+  const fmt = (n) =>
+    Number(n).toLocaleString("en-US", { style: "currency", currency: currency || "USD" });
+
   return (
-    <s-box
-      padding="base"
-      borderWidth="base"
-      borderRadius="base"
-      background="subdued"
-    >
-      <s-stack direction="block" gap="none">
-        <s-stack direction="inline" gap="tight" alignItems="center">
-          <s-icon type={icon} tone="neutral" />
-          <s-text type="small">{label}</s-text>
-        </s-stack>
-        <s-text type="strong">—</s-text>
-      </s-stack>
-    </s-box>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <p className="text-muted-foreground">Welcome to DRIMS Upsell Pro</p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <MetricCard
+          label="Total Revenue"
+          value={fmt(metrics.totalRevenue)}
+          sub="Last 30 days"
+          icon={DollarSign}
+        />
+        <MetricCard
+          label="Total Orders"
+          value={String(metrics.totalOrders)}
+          sub="Conversions, last 30 days"
+          icon={ShoppingCart}
+        />
+        <MetricCard
+          label="Conversion Rate"
+          value={`${metrics.conversionRate.toFixed(1)}%`}
+          sub="Impressions → orders"
+          icon={TrendingUp}
+        />
+        <MetricCard
+          label="AOV"
+          value={fmt(metrics.aov)}
+          sub="Per accepted offer"
+          icon={BarChart3}
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">Revenue — Last 30 Days</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {metrics.dailyRevenue.every((d) => d.revenue === 0) ? (
+            <div className="flex items-center justify-center h-[280px]">
+              <p className="text-sm text-muted-foreground">
+                No revenue data yet. Create a funnel and start selling!
+              </p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <AreaChart data={metrics.dailyRevenue}>
+                <defs>
+                  <linearGradient id="revGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11 }}
+                  className="fill-muted-foreground"
+                  tickLine={false}
+                  axisLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  className="fill-muted-foreground"
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `$${v}`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "var(--radius)",
+                    fontSize: 13,
+                  }}
+                  formatter={(value) => [fmt(value), "Revenue"]}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  fill="url(#revGradient)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
-
-export const headers = (headersArgs) => {
-  return boundary.headers(headersArgs);
-};

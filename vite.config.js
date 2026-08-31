@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
@@ -46,6 +47,11 @@ export default defineConfig({
     fs: {
       // See https://vitejs.dev/config/server-options.html#server-fs-allow for more information
       allow: ["app", "node_modules"],
+    },
+  },
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./app", import.meta.url)),
     },
   },
   plugins: [reactRouter(), tsconfigPaths()],

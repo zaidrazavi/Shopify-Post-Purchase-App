@@ -152,3 +152,208 @@ model PrePurchasePopupConfig {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// ============================================================================
+// Phase 2: multi-funnel / multi-offer models.
+// Adapted from RevLift's Supabase schema to Prisma + Shopify session auth:
+//   - Tenancy is by `shop` (myshopify domain), NOT Supabase auth.users/UUID.
+//   - No RLS / GRANT / DB triggers (tenancy enforced in app queries; timestamps
+//     via Prisma @updatedAt). Money = Decimal(10,2); IDs = uuid().
+// These sit ALONGSIDE the legacy OfferConfig / PrePurchasePopupConfig models
+// above, which stay the source of truth until Phase 4.
+// ============================================================================
+
+// Per-shop tenant record + store-level settings.
+model Store {
+  shop String @id
+
+  storeName        String?
+  storeEmail       String?
+  currency         String  @default("USD")
+  isInternal       Boolean @default(false)
+  currentPlan      String  @default("FREE")
+  monthlyRevenue   Decimal @default(0) @db.Decimal(10, 2)
+  shopifyShopId    String?
+  ownerEmail       String?
+  welcomeDismissed Boolean @default(false)
+
+  // Store-level settings blobs. Nullable; default objects live in app code.
+  prePurchaseSettings  Json?
+  postPurchaseSettings Json?
+  thankYouSettings     Json?
+
+  funnels Funnel[]
+  events  Event[]
+  billing Billing[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// A funnel groups offers of a given type for a shop.
+model Funnel {
+  id    String @id @default(uuid())
+  shop  String
+  store Store  @relation(fields: [shop], references: [shop], onDelete: Cascade)
+
+  name              String    @default("New Funnel")
+  type              String    @default("post-purchase") // pre-purchase | post-purchase | thank-you
+  status            String    @default("draft")
+  triggerType       String    @default("all-products")
+  triggerValue      String?
+  priority          Int       @default(0)
+  abTestEnabled     Boolean   @default(false)
+  variantBSplit     Int       @default(50)
+  rolloutPercentage Int       @default(100)
+  dateStart         DateTime?
+  dateEnd           DateTime?
+  customerTags      String[]  @default([])
+  excludeProducts   String[]  @default([])
+
+  offers Offer[]
+  events Event[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shop])
+  @@index([status])
+}
+
+// An individual offer within a funnel.
+model Offer {
+  id       String @id @default(uuid())
+  funnelId String
+  funnel   Funnel @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+
+  type        String  @default("upsell")
+  section     String  @default("product-page")
+  position    Int     @default(0)
+  productId   String?
+  variantId   String?
+  headline    String  @default("Special Offer!")
+  description String  @default("")
+  buttonText  String  @default("Add to Order")
+  declineText String  @default("No thanks")
+  imageUrl    String?
+
+  price          Decimal? @db.Decimal(10, 2)
+  compareAtPrice Decimal? @db.Decimal(10, 2)
+  discountType   String?
+  discountValue  Decimal? @db.Decimal(10, 2)
+
+  timerEnabled  Boolean @default(false)
+  timerDuration Int     @default(15)
+  timerMessage  String  @default("Offer expires in:")
+
+  buttonColor     String @default("#EF4444")
+  buttonTextColor String @default("#FFFFFF")
+  textColor       String @default("#000000")
+
+  badgeEnabled Boolean @default(false)
+  badgeText    String  @default("Best Value")
+  badgeColor   String  @default("#10b981")
+
+  layout String @default("vertical")
+
+  // Card design brought over from the old pre-purchase popup editor.
+  backgroundColor String?
+  cornerRadius    Int?
+
+  // --- Exact pre-purchase popup parity (mirrors PrePurchasePopupConfig).
+  // All nullable/additive; null = the old default. Reuses existing Offer columns
+  // where they already match: headline←headlineText, description←descriptionText,
+  // price←productPrice, compareAtPrice←productCompareAtPrice, discountType/Value,
+  // buttonText←acceptButtonText, buttonColor←acceptButtonColor,
+  // declineText←declineButtonText, textColor←fontColor, backgroundColor,
+  // cornerRadius, layout, timerEnabled←countdownEnabled, timerDuration←countdownMinutes.
+  headlineEnabled           Boolean? // old default true
+  subheadlineEnabled        Boolean? // old default true
+  subheadlineText           String?  // old default "A special one-time offer, just for you."
+  descriptionEnabled        Boolean? // old default true
+  timerBackgroundColor      String?  // old default "#F8C9C9"
+  productTitle              String?  // picked product's title (shown in preview)
+  imageFit                  String?  // "cover" | "contain"; old default "cover"
+  imageSize                 String?  // "small" | "medium" | "large"; old default "medium"
+  imageBorder               Boolean? // draw a border around the product image
+  autoselectVariant         Boolean? // auto-pick the first available variant
+  hideQuantitySelector      Boolean? // hide the qty control
+  predefinedQuantity        Int?     // fixed quantity added to cart
+  showCompareAt             Boolean? // old default true
+  showSavings               Boolean? // old default true
+  acceptButtonHoverColor    String?  // accept button hover color, hex
+  declineButtonColor        String?  // old default "#6D7175"
+  declineButtonHoverColor   String?  // decline button hover color, hex
+  closeButtonBehavior       String?  // "decline" | "close"; old default "decline"
+  hideIfInCart              Boolean? // old default true
+  allowSubscription         Boolean? // stored flag (subscribe flow deferred)
+  hideIfCartHasSubscription Boolean? // hide if cart already has a subscription
+  inheritStoreFont          Boolean? // true = use the theme's font
+  fontFamily                String?  // key into FONT_STACKS; old default "system"
+  selectorsColor            String?  // variant selector accent, hex
+  elementsColor             String?  // dividers/borders accent, hex
+  themeVariant              String?  // "classic" | "bold"; old default "classic"
+
+  impressions Int     @default(0)
+  conversions Int     @default(0)
+  revenue     Decimal @default(0) @db.Decimal(10, 2)
+
+  variantBHeadline    String?
+  variantBDescription String?
+  variantBButtonText  String?
+  variantBImpressions Int     @default(0)
+  variantBConversions Int     @default(0)
+  variantBRevenue     Decimal @default(0) @db.Decimal(10, 2)
+
+  trafficSplit Int @default(100)
+
+  events Event[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([funnelId])
+}
+
+// Analytics event. funnel/offer are nullable and SET NULL on delete so history
+// survives funnel/offer removal.
+model Event {
+  id    String @id @default(uuid())
+  shop  String
+  store Store  @relation(fields: [shop], references: [shop], onDelete: Cascade)
+
+  type       String
+  funnelId   String?
+  funnel     Funnel? @relation(fields: [funnelId], references: [id], onDelete: SetNull)
+  offerId    String?
+  offer      Offer?  @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  variantId  String?
+  orderId    String?
+  customerId String?
+  revenue    Decimal? @db.Decimal(10, 2)
+  metadata   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([shop, type, createdAt])
+  @@index([funnelId])
+  @@index([offerId])
+  @@index([createdAt])
+}
+
+// Billing charge record per shop.
+model Billing {
+  id    String @id @default(uuid())
+  shop  String
+  store Store  @relation(fields: [shop], references: [shop], onDelete: Cascade)
+
+  chargeId  String?
+  plan      String
+  amount    Decimal  @default(0) @db.Decimal(10, 2)
+  status    String   @default("pending")
+  billingOn DateTime @default(now())
+
+  createdAt DateTime @default(now())
+
+  @@index([shop])
+}

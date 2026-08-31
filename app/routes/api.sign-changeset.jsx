@@ -9,6 +9,11 @@ import {
   pickOffer,
   resolveShopDomain,
 } from "../models/offer.server";
+import {
+  hasNewFunnelOfType,
+  offerConfigShapeFromFunnel,
+  resolvePostPurchaseOffer,
+} from "../models/funnel-resolver.server";
 
 /**
  * Signs a post-purchase changeset so the extension can apply it.
@@ -45,10 +50,22 @@ export const action = async ({ request }) => {
 
   // Which step the buyer accepted — defaults to the main offer.
   const kind = offerKind === "downsell" ? "downsell" : "main";
-  const config = await getOfferConfig(shop);
-  const offer = pickOffer(config, kind);
 
-  if (!isOfferReady(offer)) {
+  // Resolve the offer the SAME way /api/offer did (same resolver, same
+  // deterministic pick, same config shape) so the signed changeset always
+  // matches what the buyer was shown. The numeric variantId comes from
+  // gidToNumericId inside the shape builder; changes are rebuilt here, never
+  // trusted from the client.
+  let offer;
+  if (await hasNewFunnelOfType(shop, "post-purchase")) {
+    const resolved = await resolvePostPurchaseOffer(shop);
+    offer = resolved ? pickOffer(offerConfigShapeFromFunnel(resolved), kind) : null;
+  } else {
+    const config = await getOfferConfig(shop);
+    offer = pickOffer(config, kind);
+  }
+
+  if (!offer || !isOfferReady(offer)) {
     return cors(
       Response.json({ error: "offer_not_available" }, { status: 409 }),
     );
