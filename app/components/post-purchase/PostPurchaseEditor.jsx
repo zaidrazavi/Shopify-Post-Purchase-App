@@ -53,8 +53,14 @@ export function PostPurchaseEditor({ funnel }) {
     const fields = { intent: "create-offer", offerType: "upsell", section };
     if (product) {
       fields.headline = product.title;
+      fields.productTitle = product.title;
       fields.imageUrl = product.image;
       fields.productId = product.id;
+      // The picker returns the full product with variants — carry the first
+      // variant's GID so the resolver can serve the offer (was being dropped,
+      // leaving variantId null → offer never served). Matches the full editor.
+      const variantId = product.variants?.[0]?.id;
+      if (variantId) fields.variantId = variantId;
       fields.price = String(product.price);
       if (product.compareAtPrice) fields.compareAtPrice = String(product.compareAtPrice);
     }

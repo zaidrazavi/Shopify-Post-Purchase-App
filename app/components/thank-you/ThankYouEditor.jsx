@@ -253,6 +253,10 @@ export function ThankYouEditor({ funnel, settings }) {
     // Picker returns full product objects.
     const products = items.map((p) => ({
       id: p.id,
+      // First variant's GID — required for the resolver to serve the offer
+      // (was dropped, leaving variantId null). productTitle is set from title
+      // in the create-offers action.
+      variantId: p.variants?.[0]?.id ?? null,
       title: p.title,
       image: p.image,
       price: p.price,

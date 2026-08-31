@@ -174,6 +174,13 @@ export const action = async ({ request, params }) => {
       if (imageUrl) data.imageUrl = imageUrl.toString();
       const productId = form.get("productId");
       if (productId) data.productId = productId.toString();
+      // variantId (GID from the picker) — REQUIRED for the resolver to serve the
+      // offer; gidToNumericId handles it downstream. productTitle populates the
+      // storefront product-title line (headline is the marketing line).
+      const variantId = form.get("variantId");
+      if (variantId) data.variantId = variantId.toString();
+      const productTitle = form.get("productTitle");
+      if (productTitle) data.productTitle = productTitle.toString();
       const price = form.get("price");
       if (price != null && price !== "") data.price = Number(price);
       const compareAtPrice = form.get("compareAtPrice");
@@ -194,8 +201,10 @@ export const action = async ({ request, params }) => {
       for (const p of products) {
         const data = { type: "upsell", section };
         if (p.title) data.headline = p.title;
+        if (p.title) data.productTitle = p.title;
         if (p.image) data.imageUrl = p.image;
         if (p.id) data.productId = p.id;
+        if (p.variantId) data.variantId = p.variantId; // GID; required to serve
         if (p.price != null) data.price = Number(p.price);
         if (p.compareAtPrice != null) data.compareAtPrice = Number(p.compareAtPrice);
         const offer = await createOffer(shop, funnelId, data);
