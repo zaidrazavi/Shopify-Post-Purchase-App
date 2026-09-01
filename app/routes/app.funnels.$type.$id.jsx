@@ -455,7 +455,7 @@ export default function FunnelEditor() {
             onChange={(e) => setName(e.target.value)}
             className="text-lg font-bold border-none shadow-none px-0 h-auto focus-visible:ring-0 max-w-[260px]"
           />
-          <Badge variant={status === "active" ? "default" : "secondary"} className="capitalize">
+          <Badge variant={status === "active" ? "success" : "secondary"} className="capitalize">
             {status === "active" ? "Published" : status}
           </Badge>
         </div>

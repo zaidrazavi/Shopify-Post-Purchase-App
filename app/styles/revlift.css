@@ -3,92 +3,149 @@
 @tailwind utilities;
 
 @layer base {
+  /* LIGHT theme + TEAL/EMERALD accent (money/growth vibe) applied as the
+     DEFAULT. Light neutral backgrounds, white cards, emerald brand accent.
+     Kept in sync with .dark below so the app looks the same whether or not a
+     `.dark` class is present. Visual tokens only — no logic depends on these. */
   :root {
-    --background: 0 0% 98%;
-    --foreground: 220 20% 10%;
+    --background: 210 20% 98%;
+    --foreground: 220 25% 15%;
     --card: 0 0% 100%;
-    --card-foreground: 220 20% 10%;
+    --card-foreground: 220 25% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 20% 10%;
-    --primary: 270 60% 52%;
+    --popover-foreground: 220 25% 15%;
+    --primary: 160 84% 32%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 220 20% 10%;
-    --muted: 220 14% 96%;
+    --secondary: 210 16% 95%;
+    --secondary-foreground: 220 25% 15%;
+    --muted: 210 16% 95%;
     --muted-foreground: 220 10% 46%;
-    --accent: 220 14% 96%;
-    --accent-foreground: 220 20% 10%;
-    --destructive: 0 84% 60%;
+    --accent: 210 16% 94%;
+    --accent-foreground: 220 25% 15%;
+    --destructive: 0 72% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 270 60% 52%;
-    --radius: 0.625rem;
-    --revlift-purple: 270 60% 52%;
-    --revlift-purple-light: 270 80% 95%;
-    --revlift-purple-dark: 270 65% 40%;
-    --upsell: 160 84% 39%;
-    --upsell-bg: 152 81% 96%;
-    --upsell-foreground: 164 70% 19%;
-    --downsell: 38 92% 50%;
-    --downsell-bg: 48 96% 89%;
-    --downsell-foreground: 28 80% 28%;
-    --crosssell: 217 91% 60%;
-    --crosssell-bg: 214 95% 93%;
-    --crosssell-foreground: 224 64% 33%;
-    --success: 160 84% 39%;
-    --warning: 38 92% 50%;
-    --info: 217 91% 60%;
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 220 10% 30%;
-    --sidebar-primary: 270 60% 52%;
+    --border: 220 15% 90%;
+    --input: 220 15% 90%;
+    --ring: 160 84% 32%;
+    --radius: 0.875rem;
+    /* Light hairline card border. */
+    --card-border: 220 15% 91%;
+    /* Brand gradient endpoints (emerald → teal) for the .bg-brand-gradient util. */
+    --gradient-from: 160 84% 36%;
+    --gradient-to: 170 80% 40%;
+    /* Brand accent tokens (kept these key names so components don't change).
+       Now teal: solid, a light teal-tint background, and a deeper teal. */
+    --revlift-purple: 160 84% 32%;
+    --revlift-purple-light: 160 60% 94%;
+    --revlift-purple-dark: 160 84% 26%;
+    --upsell: 160 84% 36%;
+    --upsell-bg: 160 60% 94%;
+    --upsell-foreground: 160 84% 26%;
+    --downsell: 38 92% 45%;
+    --downsell-bg: 38 92% 92%;
+    --downsell-foreground: 30 80% 32%;
+    --crosssell: 200 85% 42%;
+    --crosssell-bg: 200 85% 93%;
+    --crosssell-foreground: 205 80% 32%;
+    --success: 160 84% 36%;
+    --warning: 38 92% 45%;
+    --info: 200 85% 42%;
+    --sidebar-background: 210 20% 99%;
+    --sidebar-foreground: 220 12% 42%;
+    --sidebar-primary: 160 84% 32%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 270 80% 95%;
-    --sidebar-accent-foreground: 270 65% 40%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 270 60% 52%;
+    --sidebar-accent: 160 60% 94%;
+    --sidebar-accent-foreground: 160 84% 26%;
+    --sidebar-border: 220 15% 91%;
+    --sidebar-ring: 160 84% 32%;
   }
 
+  /* Identical to :root so an explicit `.dark` (if ever added) stays consistent. */
   .dark {
-    --background: 220 20% 7%;
-    --foreground: 0 0% 95%;
-    --card: 220 20% 10%;
-    --card-foreground: 0 0% 95%;
-    --popover: 220 20% 10%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 270 70% 65%;
-    --primary-foreground: 220 20% 7%;
-    --secondary: 220 15% 15%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 220 15% 15%;
-    --muted-foreground: 220 10% 60%;
-    --accent: 220 15% 15%;
-    --accent-foreground: 0 0% 95%;
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 0 0% 95%;
-    --border: 220 15% 18%;
-    --input: 220 15% 18%;
-    --ring: 270 70% 65%;
-    --revlift-purple: 270 70% 65%;
-    --revlift-purple-light: 270 30% 15%;
-    --revlift-purple-dark: 270 80% 75%;
-    --upsell: 160 72% 45%;
-    --upsell-bg: 160 30% 12%;
-    --upsell-foreground: 160 50% 75%;
-    --downsell: 38 80% 55%;
-    --downsell-bg: 38 30% 12%;
-    --downsell-foreground: 38 50% 75%;
-    --crosssell: 217 80% 65%;
-    --crosssell-bg: 217 30% 12%;
-    --crosssell-foreground: 217 50% 75%;
-    --sidebar-background: 220 20% 10%;
-    --sidebar-foreground: 0 0% 90%;
-    --sidebar-primary: 270 70% 65%;
-    --sidebar-primary-foreground: 220 20% 7%;
-    --sidebar-accent: 270 30% 15%;
-    --sidebar-accent-foreground: 270 70% 75%;
-    --sidebar-border: 220 15% 18%;
-    --sidebar-ring: 270 70% 65%;
+    --background: 210 20% 98%;
+    --foreground: 220 25% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 15%;
+    --primary: 160 84% 32%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 16% 95%;
+    --secondary-foreground: 220 25% 15%;
+    --muted: 210 16% 95%;
+    --muted-foreground: 220 10% 46%;
+    --accent: 210 16% 94%;
+    --accent-foreground: 220 25% 15%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 15% 90%;
+    --input: 220 15% 90%;
+    --ring: 160 84% 32%;
+    --card-border: 220 15% 91%;
+    --gradient-from: 160 84% 36%;
+    --gradient-to: 170 80% 40%;
+    --revlift-purple: 160 84% 32%;
+    --revlift-purple-light: 160 60% 94%;
+    --revlift-purple-dark: 160 84% 26%;
+    --upsell: 160 84% 36%;
+    --upsell-bg: 160 60% 94%;
+    --upsell-foreground: 160 84% 26%;
+    --downsell: 38 92% 45%;
+    --downsell-bg: 38 92% 92%;
+    --downsell-foreground: 30 80% 32%;
+    --crosssell: 200 85% 42%;
+    --crosssell-bg: 200 85% 93%;
+    --crosssell-foreground: 205 80% 32%;
+    --success: 160 84% 36%;
+    --warning: 38 92% 45%;
+    --info: 200 85% 42%;
+    --sidebar-background: 210 20% 99%;
+    --sidebar-foreground: 220 12% 42%;
+    --sidebar-primary: 160 84% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 160 60% 94%;
+    --sidebar-accent-foreground: 160 84% 26%;
+    --sidebar-border: 220 15% 91%;
+    --sidebar-ring: 160 84% 32%;
+  }
+}
+
+@layer components {
+  /* Emerald → teal brand gradient (logo image no longer uses it, but available
+     for any accent surface that opts in). */
+  .bg-brand-gradient {
+    background-image: linear-gradient(
+      135deg,
+      hsl(var(--gradient-from)),
+      hsl(var(--gradient-to))
+    );
+  }
+
+  /* Space Grotesk display face — for big page titles and metric numbers that
+     aren't h1–h4 elements. */
+  .font-display {
+    font-family: theme("fontFamily.display");
+    letter-spacing: -0.02em;
+  }
+
+  /* Soft elevation for cards on the light background (subtle gray shadow). */
+  .shadow-card {
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.06),
+      0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+
+  /* Opt-in hover for interactive cards (funnel/offer cards): subtle teal-tint
+     border + a touch more elevation (light-appropriate shadow). */
+  .card-interactive {
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.15s ease;
+  }
+  .card-interactive:hover {
+    border-color: hsl(var(--primary) / 0.45);
+    box-shadow: 0 6px 20px -6px rgba(0, 0, 0, 0.12);
   }
 }
 
@@ -97,6 +154,17 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    /* Inter is the default body font. */
+    @apply bg-background text-foreground font-sans;
+  }
+  /* Headings use Space Grotesk (bold, geometric) with tighter tracking for the
+     premium look — applied globally so components don't each need editing. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: theme("fontFamily.display");
+    font-weight: 600;
+    letter-spacing: -0.02em;
   }
 }

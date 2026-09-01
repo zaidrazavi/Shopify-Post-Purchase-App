@@ -38,12 +38,14 @@ export const loader = async ({ request }) => {
 function MetricCard({ label, value, sub, icon: Icon }) {
   return (
     <Card>
-      <CardContent className="p-5">
+      <CardContent className="p-6">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium text-muted-foreground">{label}</p>
-          <Icon className="h-4 w-4 text-muted-foreground" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Icon className="h-4 w-4" />
+          </div>
         </div>
-        <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
+        <p className="mt-3 text-3xl font-bold text-foreground font-display">{value}</p>
         <p className="mt-1 text-xs text-muted-foreground">{sub}</p>
       </CardContent>
     </Card>
@@ -63,7 +65,7 @@ export default function Dashboard() {
         <p className="text-muted-foreground">Welcome to DRIMS Upsell Pro</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label="Total Revenue"
           value={fmt(metrics.totalRevenue)}

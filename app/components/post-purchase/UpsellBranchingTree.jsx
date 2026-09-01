@@ -27,7 +27,7 @@ function OfferCard({ offer, onEdit, onDelete }) {
   const rpv = offer.impressions > 0 ? (offer.revenue / offer.impressions).toFixed(2) : "0.00";
 
   return (
-    <div className="rounded-xl border bg-card overflow-hidden">
+    <div className="rounded-lg border border-[hsl(var(--card-border))] bg-card overflow-hidden shadow-card card-interactive">
       {/* Product row */}
       <div className="p-3 flex items-start gap-3">
         <div className="h-16 w-16 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden">
@@ -250,10 +250,10 @@ function BranchConnector({ acceptLabel, declineLabel }) {
         <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-muted-foreground/40" />
       </div>
       <div className="flex w-full justify-between px-[10%] pt-12 pb-2">
-        <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-0 text-[10px] font-medium">
+        <Badge className="bg-success/15 text-success hover:bg-success/15 border-0 text-[10px] font-medium">
           {acceptLabel}
         </Badge>
-        <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-0 text-[10px] font-medium">
+        <Badge className="bg-destructive/15 text-destructive hover:bg-destructive/15 border-0 text-[10px] font-medium">
           {declineLabel}
         </Badge>
       </div>

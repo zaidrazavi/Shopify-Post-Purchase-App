@@ -3,7 +3,16 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const Card = React.forwardRef(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("rounded-lg border bg-card text-card-foreground shadow-sm", className)} {...props} />
+  <div
+    ref={ref}
+    className={cn(
+      // rounded-lg reads --radius (now 0.875rem); hairline warm border + soft
+      // elevation shadow for a premium feel on the dark background.
+      "rounded-lg border border-[hsl(var(--card-border))] bg-card text-card-foreground shadow-card",
+      className,
+    )}
+    {...props}
+  />
 ));
 Card.displayName = "Card";
 

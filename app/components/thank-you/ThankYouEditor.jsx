@@ -96,7 +96,7 @@ function ProductRecommendationPanel({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${enabled ? "bg-green-500" : "bg-destructive"}`} />
+          <div className={`h-2 w-2 rounded-full ${enabled ? "bg-success" : "bg-destructive"}`} />
           <h3 className="text-base font-semibold text-foreground">
             Product recommendation widget {enabled ? "active" : "inactive"}
           </h3>
@@ -283,7 +283,7 @@ export function ThankYouEditor({ funnel, settings }) {
             onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
             className="text-lg font-bold border-none shadow-none px-0 h-auto focus-visible:ring-0 max-w-[260px]"
           />
-          <Badge variant={status === "active" ? "default" : "secondary"} className="capitalize">
+          <Badge variant={status === "active" ? "success" : "secondary"} className="capitalize">
             {status === "active" ? "Published" : status}
           </Badge>
         </div>
