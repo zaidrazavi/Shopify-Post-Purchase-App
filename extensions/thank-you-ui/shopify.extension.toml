@@ -1,0 +1,17 @@
+# Thank-you page Checkout UI extension.
+# Docs: https://shopify.dev/docs/api/checkout-ui-extensions/latest/configuration
+api_version = "2026-07"
+
+[[extensions]]
+name = "thank-you-ui"
+handle = "thank-you-ui"
+type = "ui_extension"
+uid = "7633ee98-beab-2f8f-2b78-03c98260443c5a7ace13"
+
+[[extensions.targeting]]
+module = "./src/Checkout.jsx"
+target = "purchase.thank-you.block.render"
+
+[extensions.capabilities]
+# Allows the extension to call our app backend via the global `fetch()` API.
+network_access = true

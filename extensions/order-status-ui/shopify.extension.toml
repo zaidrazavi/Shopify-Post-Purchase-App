@@ -1,0 +1,17 @@
+# Order-status page Customer Account UI extension.
+# Docs: https://shopify.dev/docs/api/customer-account-ui-extensions/latest/configuration
+api_version = "2026-07"
+
+[[extensions]]
+name = "order-status-ui"
+handle = "order-status-ui"
+type = "ui_extension"
+uid = "5f3addd2-b7bb-fcb3-3e33-99de18c8963aa2de8253"
+
+[[extensions.targeting]]
+module = "./src/Checkout.jsx"
+target = "customer-account.order-status.block.render"
+
+[extensions.capabilities]
+# Allows the extension to call our app backend via the global `fetch()` API.
+network_access = true

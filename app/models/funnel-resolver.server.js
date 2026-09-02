@@ -1,4 +1,6 @@
 import prisma from "../db.server";
+import { getStore } from "./store.server";
+import { DEFAULT_THANK_YOU_SETTINGS } from "../lib/default-settings";
 
 /**
  * Bridge between the NEW multi-funnel/multi-offer model (Funnel + Offer) and the
@@ -281,4 +283,69 @@ export function popupConfigShapeFromOffer(o) {
     declineButtonHoverColor: o.declineButtonHoverColor ?? null,
     closeButtonBehavior: o.closeButtonBehavior ?? PRE_DEFAULTS.closeButtonBehavior,
   };
+}
+
+// gidToNumericId returns a numeric STRING; the thank-you payload wants Numbers.
+const numId = (v) => (v == null ? null : Number(v));
+
+// Merge the shop's saved thankYouSettings over the code defaults (nested widgets
+// need a per-widget merge, not a shallow spread).
+function mergeThankYouSettings(s) {
+  const d = DEFAULT_THANK_YOU_SETTINGS;
+  if (!s || typeof s !== "object") return d;
+  const w = s.widgets || {};
+  return {
+    ...d,
+    ...s,
+    widgets: {
+      ...d.widgets,
+      ...w,
+      product_recommendations: { ...d.widgets.product_recommendations, ...(w.product_recommendations || {}) },
+      faq: { ...d.widgets.faq, ...(w.faq || {}) },
+      custom_text: { ...d.widgets.custom_text, ...(w.custom_text || {}) },
+      custom_image: { ...d.widgets.custom_image, ...(w.custom_image || {}) },
+      custom_code: { ...d.widgets.custom_code, ...(w.custom_code || {}) },
+    },
+  };
+}
+
+/**
+ * The active thank-you funnel's product recs + widget settings, or null. Walks
+ * active thank-you funnels (priority order) and returns the first within its
+ * date window. Product recs = offers in section "thank-you-upsell" that have a
+ * variantId, ordered by position, capped at the settings' max_products, and
+ * pre-mapped to the payload shape (numeric ids via gidToNumericId, prices as
+ * strings via decToStr) so the public route needs no private helpers.
+ * Returns { funnel, products, settings } or null. DEFERRED: custom_code is never
+ * surfaced (can't render in a checkout UI extension).
+ */
+export async function resolveThankYouOffers(shop) {
+  const now = new Date();
+  const funnels = await activeFunnels(shop, "thank-you");
+  const funnel = funnels.find((f) => withinWindow(f, now));
+  if (!funnel) return null;
+
+  let settings = DEFAULT_THANK_YOU_SETTINGS;
+  try {
+    const store = await getStore(shop);
+    settings = mergeThankYouSettings(store?.thankYouSettings);
+  } catch {
+    settings = DEFAULT_THANK_YOU_SETTINGS;
+  }
+
+  const maxProducts = settings.widgets?.product_recommendations?.max_products ?? 3;
+  const products = (funnel.offers || [])
+    .filter((o) => o.section === "thank-you-upsell" && o.variantId)
+    .sort((a, b) => a.position - b.position)
+    .slice(0, Math.max(0, maxProducts))
+    .map((o) => ({
+      productId: numId(gidToNumericId(o.productId)),
+      variantId: numId(gidToNumericId(o.variantId)),
+      title: o.productTitle ?? o.headline ?? null,
+      image: o.imageUrl ?? null,
+      price: decToStr(o.price),
+      compareAtPrice: decToStr(o.compareAtPrice),
+    }));
+
+  return { funnel, products, settings };
 }
