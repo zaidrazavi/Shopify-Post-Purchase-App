@@ -369,8 +369,24 @@ export function postPurchaseExtras(resolved) {
     if (!o) return {};
     const extras = {};
 
+    // OCU editor cosmetics — only the subset the theme-locked live extension can
+    // structurally honor (image size, badge placement, hide money lines). Paddings
+    // and section background colors are preview-only and intentionally omitted.
+    const es = o.editorSettings && typeof o.editorSettings === "object" ? o.editorSettings : {};
+    const esp = es.product && typeof es.product === "object" ? es.product : {};
+
     // Badge (reuse existing columns; the core payload doesn't include it).
-    if (o.badgeEnabled) extras.badge = { enabled: true, text: o.badgeText ?? null };
+    if (o.badgeEnabled) {
+      extras.badge = {
+        enabled: true,
+        text: o.badgeText ?? null,
+        position: esp.badgePosition || "above_title", // above_title|under_title|next_to_price|none
+        useIcon: esp.useIcon !== false,
+      };
+    }
+
+    if (o.imageSize) extras.imageSize = o.imageSize; // small | medium | large
+    if (o.imageFit) extras.imageFit = o.imageFit; // cover | contain
 
     if (o.buttonsPosition) extras.buttonsPosition = o.buttonsPosition; // "stacked" | "side-by-side"
 
@@ -383,7 +399,11 @@ export function postPurchaseExtras(resolved) {
         images: Array.isArray(o.trustBadgeImages) ? o.trustBadgeImages : [],
       };
     }
-    if (o.showMoneySummary != null) extras.showMoneySummary = Boolean(o.showMoneySummary);
+    if (o.showMoneySummary != null) {
+      extras.showMoneySummary = Boolean(o.showMoneySummary);
+      extras.hideSubtotalLine = Boolean(esp.hideSubtotalLine);
+      extras.hideTotalLine = Boolean(esp.hideTotalLine);
+    }
 
     if (o.videoEnabled) {
       extras.video = {

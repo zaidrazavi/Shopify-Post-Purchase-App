@@ -342,6 +342,23 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     ? [...offer.contentBlocks].sort((a, b) => (a?.position ?? 0) - (b?.position ?? 0))
     : [];
 
+  // Badge: honor position + icon from the editor (text/emphasis only; the
+  // checkout theme controls color).
+  const badgePos = offer.badge?.position || "above_title";
+  const badgeNode =
+    offer.badge?.enabled && badgePos !== "none" ? (
+      <Text emphasized>{(offer.badge.useIcon ? "🏆 " : "") + (offer.badge.text || "")}</Text>
+    ) : null;
+
+  // Image size → Layout media sizes (fixed image column width per breakpoint).
+  const IMG_SIZES = {
+    small: { medium: 160, large: 190 },
+    medium: { medium: 220, large: 260 },
+    large: { medium: 300, large: 360 },
+  };
+  const imgSz = IMG_SIZES[offer.imageSize] || IMG_SIZES.medium;
+  const imgFit = offer.imageFit === "cover" ? "cover" : "contain";
+
   const buttonsNode =
     offer.buttonsPosition === "side-by-side" ? (
       <ButtonGroup>
@@ -375,23 +392,31 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
         maxInlineSize={0.95}
         media={[
           { viewportSize: "small", sizes: [1, 20, 1] },
-          { viewportSize: "medium", sizes: [220, 24, 0.62] },
-          { viewportSize: "large", sizes: [260, 30, 0.66] },
+          { viewportSize: "medium", sizes: [imgSz.medium, 24, "fill"] },
+          { viewportSize: "large", sizes: [imgSz.large, 30, "fill"] },
         ]}
       >
         <View>
           {offer.image ? (
-            <Image source={offer.image} description={offer.title} fit="contain" bordered />
+            <Image source={offer.image} description={offer.title} fit={imgFit} bordered />
           ) : null}
         </View>
         <View />
         <BlockStack spacing="base">
-          {offer.badge?.enabled ? <Text emphasized>{offer.badge.text || ""}</Text> : null}
+          {badgePos === "above_title" ? badgeNode : null}
 
           <Heading level={3}>{offer.title}</Heading>
+          {badgePos === "under_title" ? badgeNode : null}
           {offer.description ? <TextBlock subdued>{offer.description}</TextBlock> : null}
 
-          {priceNode}
+          {badgePos === "next_to_price" ? (
+            <InlineStack spacing="tight">
+              {priceNode}
+              {badgeNode}
+            </InlineStack>
+          ) : (
+            priceNode
+          )}
 
           {offer.usp?.enabled && Array.isArray(offer.usp.items) && offer.usp.items.length ? (
             <BlockStack spacing="xtight">
@@ -406,14 +431,18 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
           {offer.showMoneySummary ? (
             <BlockStack spacing="tight">
               <Separator />
-              <Bookend trailing>
-                <Text subdued>Subtotal</Text>
-                <Text>{finalPrice} {displayCurrency}</Text>
-              </Bookend>
-              <Bookend trailing>
-                <Text emphasized>Total</Text>
-                <Text emphasized>{finalPrice} {displayCurrency}</Text>
-              </Bookend>
+              {!offer.hideSubtotalLine ? (
+                <Bookend trailing>
+                  <Text subdued>Subtotal</Text>
+                  <Text>{finalPrice} {displayCurrency}</Text>
+                </Bookend>
+              ) : null}
+              {!offer.hideTotalLine ? (
+                <Bookend trailing>
+                  <Text emphasized>Total</Text>
+                  <Text emphasized>{finalPrice} {displayCurrency}</Text>
+                </Bookend>
+              ) : null}
             </BlockStack>
           ) : null}
 

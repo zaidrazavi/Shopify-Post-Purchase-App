@@ -309,6 +309,11 @@ model Offer {
   videoThumbnailUrl  String?  // thumbnail image for the video block
   videoLinkUrl       String?  // external video URL (opens out; no inline player)
   contentBlocks      Json?    // ordered blocks: [{ type, position, ...fields }]
+  editorSettings     Json?    // OCU editor cosmetics (paddings, section bg colors,
+  //                             badge color/position, image size/fit, hide lines,
+  //                             text&video layout, etc.). Preview-authoritative;
+  //                             the theme-locked live extension honors the subset
+  //                             it can (see post-purchase-ui/src/index.jsx).
 
   impressions Int     @default(0)
   conversions Int     @default(0)

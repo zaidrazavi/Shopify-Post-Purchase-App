@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
+import { Slider } from "@/components/ui/slider";
 import {
   Select,
   SelectContent,
@@ -27,13 +28,19 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from "@/components/ui/accordion";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { ShopifyProductPicker } from "@/components/ShopifyProductPicker";
 import { OfferPreview, DEVICES } from "@/components/offer-preview";
 import { PostPurchasePreview } from "@/components/post-purchase-preview";
 import {
   ArrowLeft, Save, Package, Search, Monitor, Tablet, Smartphone,
   Heading1, TextCursorInput, Clock, ListChecks, DollarSign, MousePointerClick, Eye, Paintbrush,
-  Award, Sparkles, ShieldCheck, Video, LayoutList, Receipt, Plus, Trash2, ArrowUp, ArrowDown,
+  Video, LayoutList, Plus, Trash2, ArrowUp, ArrowDown,
+  HelpCircle, Type, Image as ImageIcon, Minus, PanelLeft, PanelRight, AlignCenter,
 } from "lucide-react";
 
 const VALID_TYPES = ["pre-purchase", "post-purchase", "thank-you"];
@@ -49,6 +56,48 @@ function serializeOffer(o) {
     discountValue: num(o.discountValue),
     revenue: Number(o.revenue ?? 0),
     variantBRevenue: Number(o.variantBRevenue ?? 0),
+  };
+}
+
+// OCU editor cosmetics (preview-authoritative). Deep-defaulted so every control
+// is stable and a save persists concrete values.
+function withEditorDefaults(es) {
+  const s = es && typeof es === "object" && !Array.isArray(es) ? es : {};
+  const g = (k) => (s[k] && typeof s[k] === "object" ? s[k] : {});
+  const d = g("displayOffer"), h = g("heading"), c = g("countdown"), p = g("product"), t = g("textVideo");
+  return {
+    previewType: s.previewType ?? "one_time_and_sub",
+    displayOffer: {
+      hideIfSubscription: d.hideIfSubscription ?? false,
+      allowSubscription: d.allowSubscription ?? true,
+      subscriptionOnlyIfOneTime: d.subscriptionOnlyIfOneTime ?? false,
+    },
+    heading: { bg: h.bg ?? "", top: h.top ?? 40, bottom: h.bottom ?? 20 },
+    countdown: { bg: c.bg ?? "", fullWidth: c.fullWidth ?? false, top: c.top ?? 50, bottom: c.bottom ?? 30 },
+    product: {
+      offerDescription: p.offerDescription ?? true,
+      offerProduct: p.offerProduct ?? "same_variant",
+      displayFor: p.displayFor ?? "random_in_cart",
+      useIcon: p.useIcon ?? true,
+      badgeColor: p.badgeColor ?? "#F4A460",
+      badgePosition: p.badgePosition ?? "above_title",
+      shipping: p.shipping ?? "free",
+      hideShippingLine: p.hideShippingLine ?? true,
+      hideSubtotalLine: p.hideSubtotalLine ?? false,
+      hideTotalLine: p.hideTotalLine ?? false,
+      paymentDisclaimer: p.paymentDisclaimer ?? false,
+      top: p.top ?? 50, bottom: p.bottom ?? 40,
+    },
+    textVideo: {
+      layout: t.layout ?? "center",
+      playButtonLabel: t.playButtonLabel ?? "",
+      hidePlayIcon: t.hidePlayIcon ?? false,
+      headline: t.headline ?? true,
+      backButtonLabel: t.backButtonLabel ?? "Back to Offer",
+      autoplay: t.autoplay ?? true,
+      bg: t.bg ?? "#000000",
+      top: t.top ?? 50, bottom: t.bottom ?? 30,
+    },
   };
 }
 
@@ -108,6 +157,7 @@ function normalizeOffer(o) {
     videoThumbnailUrl: o.videoThumbnailUrl ?? "",
     videoLinkUrl: o.videoLinkUrl ?? "",
     contentBlocks: Array.isArray(o.contentBlocks) ? o.contentBlocks : [],
+    editorSettings: withEditorDefaults(o.editorSettings),
   };
 }
 
@@ -131,7 +181,7 @@ export const loader = async ({ request, params }) => {
   if (!dbError && (!offer || !funnel || offer.funnelId !== funnel.id)) {
     throw new Response("Not Found", { status: 404 });
   }
-  return { offer, funnel, type, dbError };
+  return { offer, funnel, type, dbError, shop };
 };
 
 const STR_FIELDS = [
@@ -155,7 +205,7 @@ const BOOL_FIELDS = [
   // OCU post-purchase
   "uspEnabled", "trustBadgesEnabled", "showMoneySummary", "videoEnabled",
 ];
-// Prisma Json columns — pass arrays through as-is, else null.
+// Prisma Json columns — arrays pass through as-is, else null.
 const JSON_FIELDS = ["uspItems", "trustBadgeImages", "contentBlocks"];
 
 function coerceOffer(raw) {
@@ -179,6 +229,11 @@ function coerceOffer(raw) {
   }
   for (const k of BOOL_FIELDS) if (k in raw) data[k] = Boolean(raw[k]);
   for (const k of JSON_FIELDS) if (k in raw) data[k] = Array.isArray(raw[k]) ? raw[k] : null;
+  // editorSettings: a plain object (OCU cosmetics)
+  if ("editorSettings" in raw) {
+    const es = raw.editorSettings;
+    data.editorSettings = es && typeof es === "object" && !Array.isArray(es) ? es : null;
+  }
   return data;
 }
 
@@ -215,14 +270,128 @@ function ColorField({ label, value, onChange }) {
   );
 }
 
-function SwitchRow({ label, checked, onChange, details }) {
+function NewBadge() {
+  return (
+    <span className="ml-1.5 inline-flex items-center rounded-full bg-blue-500 px-2 py-0.5 text-[10px] font-semibold leading-none text-white">
+      New
+    </span>
+  );
+}
+
+function Help({ text }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button type="button" className="text-muted-foreground/70 hover:text-muted-foreground" aria-label="Help">
+            <HelpCircle className="h-3.5 w-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[220px] text-xs">{text}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function SwitchRow({ label, checked, onChange, details, isNew, help }) {
   return (
     <div className="flex items-start justify-between gap-3">
-      <div>
-        <Label className="text-sm">{label}</Label>
+      <div className="min-w-0">
+        <div className="flex items-center gap-1">
+          <Label className="text-sm">{label}</Label>
+          {isNew ? <NewBadge /> : null}
+          {help ? <Help text={help} /> : null}
+        </div>
         {details ? <p className="text-xs text-muted-foreground mt-0.5">{details}</p> : null}
       </div>
       <Switch checked={!!checked} onCheckedChange={onChange} />
+    </div>
+  );
+}
+
+// 0–100 slider row (padding).
+function Pad({ label, value, onChange }) {
+  return (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <Slider value={[Number(value) || 0]} min={0} max={100} step={1} onValueChange={([v]) => onChange(v)} className="mt-2" />
+    </div>
+  );
+}
+
+// Color swatch button (checkerboard when transparent) → popover picker.
+function ColorSwatchRow({ label, value, onChange, help }) {
+  const empty = !value;
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-1">
+        <Label className="text-xs">{label}</Label>
+        {help ? <Help text={help} /> : null}
+      </div>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={label}
+            className="h-6 w-6 shrink-0 rounded border"
+            style={
+              empty
+                ? {
+                    backgroundImage:
+                      "linear-gradient(45deg,#ccc 25%,transparent 25%),linear-gradient(-45deg,#ccc 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ccc 75%),linear-gradient(-45deg,transparent 75%,#ccc 75%)",
+                    backgroundSize: "8px 8px",
+                    backgroundPosition: "0 0,0 4px,4px -4px,-4px 0",
+                  }
+                : { background: value }
+            }
+          />
+        </PopoverTrigger>
+        <PopoverContent className="w-auto space-y-2 p-2">
+          <input type="color" value={value || "#ffffff"} onChange={(e) => onChange(e.target.value)} className="h-8 w-40 cursor-pointer" />
+          <Button variant="outline" size="sm" className="h-7 w-full text-xs" onClick={() => onChange("")}>Transparent</Button>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+// Small segmented button group (S/M/L, Fit/Fill, layout icons).
+function Seg({ label, options, value, onChange }) {
+  return (
+    <div>
+      {label ? <Label className="text-xs">{label}</Label> : null}
+      <div className={`${label ? "mt-1 " : ""}inline-flex rounded-md border p-0.5`}>
+        {options.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            className={`min-w-9 rounded px-3 py-1 text-xs font-medium transition-colors ${
+              value === o.value ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
+            }`}
+            aria-pressed={value === o.value}
+          >
+            {o.icon ? <o.icon className="mx-auto h-4 w-4" /> : o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Text input with a live "x/max" character counter.
+function CountedInput({ label, value, onChange, max, placeholder, help }) {
+  const v = value ?? "";
+  return (
+    <div>
+      <div className="flex items-center gap-1">
+        <Label className="text-xs">{label}</Label>
+        {help ? <Help text={help} /> : null}
+      </div>
+      <div className="relative mt-1">
+        <Input value={v} maxLength={max} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="h-9 pr-12 text-xs" />
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">{v.length}/{max}</span>
+      </div>
     </div>
   );
 }
@@ -285,11 +454,11 @@ function UspEditor({ items, onChange }) {
 }
 
 const BLOCK_TYPES = [
-  { value: "heading", label: "Heading" },
-  { value: "text", label: "Text" },
-  { value: "divider", label: "Divider" },
-  { value: "image", label: "Image" },
-  { value: "video", label: "Video" },
+  { value: "heading", label: "Heading", icon: Heading1 },
+  { value: "text", label: "Text", icon: Type },
+  { value: "image", label: "Image", icon: ImageIcon },
+  { value: "video", label: "Video", icon: Video, isNew: true },
+  { value: "divider", label: "Divider", icon: Minus },
 ];
 
 function ContentBlocksEditor({ blocks, onChange }) {
@@ -330,19 +499,275 @@ function ContentBlocksEditor({ blocks, onChange }) {
           )}
         </div>
       ))}
-      <div className="flex flex-wrap gap-1.5">
-        {BLOCK_TYPES.map((t) => (
-          <Button key={t.value} variant="outline" size="sm" className="h-8 text-xs" onClick={() => commit([...list, { type: t.value, position: list.length }])}>
-            <Plus className="h-3 w-3 mr-1" />{t.label}
-          </Button>
-        ))}
-      </div>
     </div>
   );
 }
 
+// "+ Add Content Block" popover menu (OCU parity).
+function AddContentBlock({ blocks, onChange }) {
+  const list = Array.isArray(blocks) ? blocks : [];
+  const add = (type) => onChange([...list, { type, position: list.length }].map((b, i) => ({ ...b, position: i })));
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" className="w-full">
+          <Plus className="mr-2 h-4 w-4" /> Add Content Block
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        {BLOCK_TYPES.map((t) => (
+          <DropdownMenuItem key={t.value} onSelect={() => add(t.value)} className="gap-2">
+            <t.icon className="h-4 w-4 text-muted-foreground" />
+            {t.label}
+            {t.isNew ? <NewBadge /> : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/* ─── OCU post-purchase left panel ─── */
+function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
+  const es = draft.editorSettings;
+  const imgSizeSeg = [
+    { value: "small", label: "S" },
+    { value: "medium", label: "M" },
+    { value: "large", label: "L" },
+  ];
+  const fitVal = draft.imageFit === "cover" ? "fill" : "fit";
+  return (
+    <Accordion type="multiple" defaultValue={["pp-display", "pp-product"]} className="space-y-2">
+      {/* 1. Display Offer */}
+      <SectionItem value="pp-display" icon={Eye} title="Display Offer">
+        <SwitchRow label="Hide offer if order has subscription products" checked={es.displayOffer.hideIfSubscription} onChange={(v) => setES("displayOffer", "hideIfSubscription", v)} help="Skip this offer when the original order already contains a subscription item." />
+        <SwitchRow label="Allow subscription option" checked={es.displayOffer.allowSubscription} onChange={(v) => setES("displayOffer", "allowSubscription", v)} help="Offer a Subscribe & save choice alongside one-time purchase." />
+        <SwitchRow label="Offer subscription only, if product initially purchased as a one-time" checked={es.displayOffer.subscriptionOnlyIfOneTime} onChange={(v) => setES("displayOffer", "subscriptionOnlyIfOneTime", v)} help="Show the subscription variant only when the initial purchase was one-time." />
+        <div className="rounded-md bg-muted/60 p-2 text-xs text-muted-foreground">
+          Your live post-purchase offers automatically inherit your Shopify checkout styles. Colors, fonts and per-section padding below shape this preview; the live page follows the checkout theme.
+        </div>
+      </SectionItem>
+
+      {/* 2. Heading */}
+      <SectionItem value="pp-heading" icon={Heading1} title="Heading">
+        <SwitchRow label="Show heading" checked={draft.headlineEnabled} onChange={(v) => set("headlineEnabled", v)} />
+        <div>
+          <Label className="text-xs">Heading text</Label>
+          <Input value={draft.headline} onChange={(e) => set("headline", e.target.value)} placeholder="Add {product} to your order" className="mt-1 h-9" />
+        </div>
+        <ColorSwatchRow label="Background Color" value={es.heading.bg} onChange={(v) => setES("heading", "bg", v)} />
+        <Pad label="Top padding" value={es.heading.top} onChange={(v) => setES("heading", "top", v)} />
+        <Pad label="Bottom padding" value={es.heading.bottom} onChange={(v) => setES("heading", "bottom", v)} />
+      </SectionItem>
+
+      {/* 3. Countdown Timer */}
+      <SectionItem value="pp-timer" icon={Clock} title="Countdown Timer">
+        <SwitchRow label="Show countdown timer" checked={draft.timerEnabled} onChange={(v) => set("timerEnabled", v)} />
+        <ColorSwatchRow label="Background Color" value={es.countdown.bg} onChange={(v) => setES("countdown", "bg", v)} />
+        <SwitchRow label="Full width" checked={es.countdown.fullWidth} onChange={(v) => setES("countdown", "fullWidth", v)} />
+        <div>
+          <Label className="text-xs">Time Limit</Label>
+          <Select value={String(draft.timerDuration)} onValueChange={(v) => set("timerDuration", v)}>
+            <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {[5, 10, 15, 20, 30].map((m) => <SelectItem key={m} value={String(m)}>{m} minutes</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <Pad label="Top padding" value={es.countdown.top} onChange={(v) => setES("countdown", "top", v)} />
+        <Pad label="Bottom padding" value={es.countdown.bottom} onChange={(v) => setES("countdown", "bottom", v)} />
+      </SectionItem>
+
+      {/* 4. Upsell Product */}
+      <SectionItem value="pp-product" icon={Package} title="Upsell Product">
+        {/* Offer settings */}
+        {hasProduct ? (
+          <div className="rounded-lg border p-3 flex items-center gap-3">
+            <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+              {draft.imageUrl ? <img src={draft.imageUrl} alt="" className="h-full w-full object-cover" /> : <Package className="h-5 w-5 text-muted-foreground" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{draft.productTitle || "Selected product"}</p>
+              {draft.price != null && draft.price !== "" && <p className="text-xs text-muted-foreground">${Number(draft.price).toFixed(2)}</p>}
+            </div>
+            <Button variant="outline" size="sm" onClick={openPicker}>Change</Button>
+          </div>
+        ) : (
+          <Button variant="outline" className="w-full justify-start h-12 text-muted-foreground" onClick={openPicker}>
+            <Search className="h-4 w-4 mr-2" /> Select a product...
+          </Button>
+        )}
+
+        <SwitchRow label="Offer Description" checked={draft.descriptionEnabled} onChange={(v) => set("descriptionEnabled", v)} isNew />
+        {draft.descriptionEnabled ? (
+          <Textarea value={draft.description} onChange={(e) => set("description", e.target.value)} placeholder="Product description" className="min-h-[60px] resize-none text-xs" />
+        ) : null}
+
+        {/* Image */}
+        <div className="border-t pt-3 space-y-3">
+          <Seg label="Image Size" options={imgSizeSeg} value={draft.imageSize} onChange={(v) => set("imageSize", v)} />
+          <Seg label="Image Resizing" options={[{ value: "fit", label: "Fit" }, { value: "fill", label: "Fill" }]} value={fitVal} onChange={(v) => set("imageFit", v === "fill" ? "cover" : "contain")} />
+          <SwitchRow label="Image Border" checked={draft.imageBorder} onChange={(v) => set("imageBorder", v)} />
+        </div>
+
+        {/* Badge */}
+        <div className="border-t pt-3 space-y-3">
+          <SwitchRow label="Badge" checked={draft.badgeEnabled} onChange={(v) => set("badgeEnabled", v)} />
+          <div>
+            <Label className="text-xs">Badge Label</Label>
+            <Input value={draft.badgeText} onChange={(e) => set("badgeText", e.target.value)} placeholder="Bestseller" className="mt-1 h-9" />
+          </div>
+          <SwitchRow label="Use Icon" checked={es.product.useIcon} onChange={(v) => setES("product", "useIcon", v)} help="Show a trophy icon before the badge text." />
+          <ColorSwatchRow label="Badge Color" value={es.product.badgeColor} onChange={(v) => setES("product", "badgeColor", v)} />
+          <div>
+            <Label className="text-xs">Badge Position</Label>
+            <Select value={es.product.badgePosition} onValueChange={(v) => setES("product", "badgePosition", v)}>
+              <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="above_title">Above Product Title</SelectItem>
+                <SelectItem value="under_title">Under Product Title</SelectItem>
+                <SelectItem value="next_to_price">Next to Price</SelectItem>
+                <SelectItem value="none">None</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Pricing & discount */}
+        <div className="border-t pt-3 space-y-3">
+          <div>
+            <Label className="text-xs">Discount</Label>
+            <Select value={draft.discountType} onValueChange={(v) => set("discountType", v)}>
+              <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="percentage">Percentage</SelectItem>
+                <SelectItem value="fixed">Fixed override price</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {draft.discountType !== "none" && (
+            <div>
+              <Label className="text-xs">{draft.discountType === "percentage" ? "Discount percentage" : "Override price"}</Label>
+              <Input type="number" min="0" {...(draft.discountType === "percentage" ? { max: "100" } : {})} value={draft.discountValue ?? ""} onChange={(e) => set("discountValue", e.target.value)} className="mt-1 h-9" />
+            </div>
+          )}
+          <SwitchRow label="Compare-at Price" checked={draft.showCompareAt} onChange={(v) => set("showCompareAt", v)} isNew help="Show the original price struck through next to the offer price." />
+        </div>
+
+        {/* Shipping & money lines */}
+        <div className="border-t pt-3 space-y-3">
+          <div>
+            <Label className="text-xs">Shipping</Label>
+            <Select value={es.product.shipping} onValueChange={(v) => setES("product", "shipping", v)}>
+              <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="free">Free Shipping</SelectItem>
+                <SelectItem value="charge">Charge for Shipping</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {es.product.shipping === "free" ? (
+            <SwitchRow label="Hide Shipping line for Free Shipping" checked={es.product.hideShippingLine} onChange={(v) => setES("product", "hideShippingLine", v)} />
+          ) : null}
+          <SwitchRow label="Show money summary (Subtotal / Total)" checked={draft.showMoneySummary} onChange={(v) => set("showMoneySummary", v)} />
+          {draft.showMoneySummary ? (
+            <>
+              <SwitchRow label="Hide Subtotal line" checked={es.product.hideSubtotalLine} onChange={(v) => setES("product", "hideSubtotalLine", v)} isNew />
+              <SwitchRow label="Hide Total line" checked={es.product.hideTotalLine} onChange={(v) => setES("product", "hideTotalLine", v)} isNew />
+            </>
+          ) : null}
+        </div>
+
+        {/* Quantity */}
+        <div className="border-t pt-3 space-y-3">
+          <SwitchRow label="Hide Quantity Selector" checked={draft.hideQuantitySelector} onChange={(v) => set("hideQuantitySelector", v)} />
+          <div>
+            <Label className="text-xs">Predefined Quantity</Label>
+            <Input type="number" min="1" value={draft.predefinedQuantity} onChange={(e) => set("predefinedQuantity", e.target.value)} className="mt-1 h-9" />
+          </div>
+        </div>
+
+        {/* Buttons */}
+        <div className="border-t pt-3 space-y-3">
+          <div>
+            <Label className="text-xs">Buttons Position</Label>
+            <Select value={draft.buttonsPosition} onValueChange={(v) => set("buttonsPosition", v)}>
+              <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="stacked">Accept above decline</SelectItem>
+                <SelectItem value="side-by-side">Accept beside decline</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Accept button text</Label>
+            <Input value={draft.buttonText} onChange={(e) => set("buttonText", e.target.value)} className="mt-1 h-9" />
+          </div>
+          <div>
+            <Label className="text-xs">Decline button text</Label>
+            <Input value={draft.declineText} onChange={(e) => set("declineText", e.target.value)} className="mt-1 h-9" />
+          </div>
+          <SwitchRow label="Payment Disclaimer" checked={es.product.paymentDisclaimer} onChange={(v) => setES("product", "paymentDisclaimer", v)} />
+        </div>
+
+        {/* USP */}
+        <div className="border-t pt-3 space-y-3">
+          <SwitchRow label="USP Text" checked={draft.uspEnabled} onChange={(v) => set("uspEnabled", v)} />
+          {draft.uspEnabled ? <UspEditor items={draft.uspItems} onChange={(v) => set("uspItems", v)} /> : null}
+          <SwitchRow label="USP Image (trust badges)" checked={draft.trustBadgesEnabled} onChange={(v) => set("trustBadgesEnabled", v)} />
+          {draft.trustBadgesEnabled ? <StringListEditor items={draft.trustBadgeImages} onChange={(v) => set("trustBadgeImages", v)} placeholder="Badge image URL" addLabel="Add image" /> : null}
+        </div>
+
+        <div className="border-t pt-3 space-y-3">
+          <Pad label="Top padding" value={es.product.top} onChange={(v) => setES("product", "top", v)} />
+          <Pad label="Bottom padding" value={es.product.bottom} onChange={(v) => setES("product", "bottom", v)} />
+        </div>
+      </SectionItem>
+
+      {/* 5. Text And Video */}
+      <SectionItem value="pp-textvideo" icon={Video} title="Text And Video">
+        <Seg
+          label="Layout"
+          options={[
+            { value: "left", icon: PanelLeft },
+            { value: "center", icon: AlignCenter },
+            { value: "right", icon: PanelRight },
+          ]}
+          value={es.textVideo.layout}
+          onChange={(v) => setES("textVideo", "layout", v)}
+        />
+        <SwitchRow label="Show video block" checked={draft.videoEnabled} onChange={(v) => set("videoEnabled", v)} details="A thumbnail linking to the video (no inline player in post-purchase)." />
+        <div>
+          <Label className="text-xs">Video Source</Label>
+          <Input value={draft.videoLinkUrl} onChange={(e) => set("videoLinkUrl", e.target.value)} placeholder="https://youtube.com/watch?..." className="mt-1 h-9 text-xs" />
+        </div>
+        <div>
+          <Label className="text-xs">Thumbnail image URL</Label>
+          <Input value={draft.videoThumbnailUrl} onChange={(e) => set("videoThumbnailUrl", e.target.value)} placeholder="https://..." className="mt-1 h-9 text-xs" />
+        </div>
+        <CountedInput label="Play Button label" value={es.textVideo.playButtonLabel} onChange={(v) => setES("textVideo", "playButtonLabel", v)} max={25} placeholder="Watch video" />
+        <SwitchRow label="Hide Play icon" checked={es.textVideo.hidePlayIcon} onChange={(v) => setES("textVideo", "hidePlayIcon", v)} />
+        <SwitchRow label="Headline" checked={es.textVideo.headline} onChange={(v) => setES("textVideo", "headline", v)} />
+        <CountedInput label="Back Button label" value={es.textVideo.backButtonLabel} onChange={(v) => setES("textVideo", "backButtonLabel", v)} max={25} placeholder="Back to Offer" />
+        <SwitchRow label="Autoplay" checked={es.textVideo.autoplay} onChange={(v) => setES("textVideo", "autoplay", v)} />
+        <ColorSwatchRow label="Background Color" value={es.textVideo.bg} onChange={(v) => setES("textVideo", "bg", v)} />
+        <Pad label="Top padding" value={es.textVideo.top} onChange={(v) => setES("textVideo", "top", v)} />
+        <Pad label="Bottom padding" value={es.textVideo.bottom} onChange={(v) => setES("textVideo", "bottom", v)} />
+      </SectionItem>
+
+      {/* Content blocks */}
+      <SectionItem value="pp-blocks" icon={LayoutList} title="Content Blocks">
+        <p className="text-xs text-muted-foreground">Ordered blocks shown below the offer.</p>
+        <ContentBlocksEditor blocks={draft.contentBlocks} onChange={(v) => set("contentBlocks", v)} />
+        <AddContentBlock blocks={draft.contentBlocks} onChange={(v) => set("contentBlocks", v)} />
+      </SectionItem>
+    </Accordion>
+  );
+}
+
 export default function OfferEditor() {
-  const { offer, funnel, type, dbError } = useLoaderData();
+  const { offer, funnel, type, dbError, shop } = useLoaderData();
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
@@ -352,6 +777,8 @@ export default function OfferEditor() {
 
   const busy = fetcher.state !== "idle";
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
+  const setES = (group, key, value) =>
+    setDraft((d) => ({ ...d, editorSettings: { ...d.editorSettings, [group]: { ...d.editorSettings[group], [key]: value } } }));
 
   const save = () =>
     fetcher.submit({ intent: "update-offer", data: JSON.stringify(draft) }, { method: "post" });
@@ -379,6 +806,8 @@ export default function OfferEditor() {
 
   const backHref = `/app/funnels/${type}/${funnel.id}`;
   const hasProduct = !!draft.productId;
+  const isPP = type === "post-purchase";
+  const storeName = (shop || "").replace(/\.myshopify\.com$/, "");
 
   return (
     <div className="space-y-4">
@@ -389,7 +818,9 @@ export default function OfferEditor() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">
-            <h1 className="text-lg font-bold text-foreground truncate">Edit Offer</h1>
+            <h1 className="text-lg font-bold text-foreground truncate">
+              {isPP ? "Post-Purchase Upsell Editor" : "Edit Offer"}
+            </h1>
             <p className="text-xs text-muted-foreground capitalize">{draft.type} offer · {funnel.name}</p>
           </div>
         </div>
@@ -400,305 +831,243 @@ export default function OfferEditor() {
       </div>
 
       {/* Split panel */}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-        {/* LEFT: 9 sections in the old order */}
-        <Accordion type="multiple" defaultValue={["headline", "product"]} className="space-y-2">
-          {/* 1. Headline */}
-          <SectionItem value="headline" icon={Heading1} title="Headline">
-            <SwitchRow label="Show headline" checked={draft.headlineEnabled} onChange={(v) => set("headlineEnabled", v)} />
-            <div>
-              <Label className="text-xs">Headline</Label>
-              <Input value={draft.headline} onChange={(e) => set("headline", e.target.value)} className="mt-1 h-9" />
-            </div>
-          </SectionItem>
-
-          {/* 2. Sub-headline (popup only) */}
-          {type !== "post-purchase" && (
-            <SectionItem value="subheadline" icon={TextCursorInput} title="Sub-headline">
-              <SwitchRow label="Show subheadline" checked={draft.subheadlineEnabled} onChange={(v) => set("subheadlineEnabled", v)} />
-              <div>
-                <Label className="text-xs">Subheadline</Label>
-                <Input value={draft.subheadlineText} onChange={(e) => set("subheadlineText", e.target.value)} className="mt-1 h-9" />
-              </div>
-            </SectionItem>
-          )}
-
-          {/* 3. Timer Bar */}
-          <SectionItem value="timer" icon={Clock} title="Timer Bar">
-            <SwitchRow label="Show countdown timer" checked={draft.timerEnabled} onChange={(v) => set("timerEnabled", v)} />
-            <div>
-              <Label className="text-xs">Countdown length (minutes)</Label>
-              <Input type="number" min="1" value={draft.timerDuration} onChange={(e) => set("timerDuration", e.target.value)} className="mt-1 h-9" />
-            </div>
-            <ColorField label="Timer background color" value={draft.timerBackgroundColor} onChange={(v) => set("timerBackgroundColor", v)} />
-          </SectionItem>
-
-          {/* 4. Product & Image */}
-          <SectionItem value="product" icon={Package} title="Product & Image">
-            {hasProduct ? (
-              <div className="rounded-lg border p-3 flex items-center gap-3">
-                <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                  {draft.imageUrl ? (
-                    <img src={draft.imageUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <Package className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{draft.productTitle || "Selected product"}</p>
-                  {draft.price != null && draft.price !== "" && (
-                    <p className="text-xs text-muted-foreground">${Number(draft.price).toFixed(2)}</p>
-                  )}
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>Change</Button>
-              </div>
-            ) : (
-              <Button variant="outline" className="w-full justify-start h-12 text-muted-foreground" onClick={() => setPickerOpen(true)}>
-                <Search className="h-4 w-4 mr-2" /> Select a product...
-              </Button>
-            )}
-            <div>
-              <Label className="text-xs">Image size</Label>
-              <Select value={draft.imageSize} onValueChange={(v) => set("imageSize", v)}>
-                <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="small">Small</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="large">Large</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Image resizing</Label>
-              <Select value={draft.imageFit} onValueChange={(v) => set("imageFit", v)}>
-                <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cover">Fill (cover &amp; crop)</SelectItem>
-                  <SelectItem value="contain">Fit (whole image)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <SwitchRow label="Image border" checked={draft.imageBorder} onChange={(v) => set("imageBorder", v)} />
-            <SwitchRow label="Autoselect variant" checked={draft.autoselectVariant} onChange={(v) => set("autoselectVariant", v)} />
-            <SwitchRow label="Hide quantity selector" checked={draft.hideQuantitySelector} onChange={(v) => set("hideQuantitySelector", v)} />
-            <div>
-              <Label className="text-xs">Predefined quantity</Label>
-              <Input type="number" min="1" value={draft.predefinedQuantity} onChange={(e) => set("predefinedQuantity", e.target.value)} className="mt-1 h-9" />
-            </div>
-          </SectionItem>
-
-          {/* 5. Product Details */}
-          <SectionItem value="details" icon={ListChecks} title="Product Details">
-            <SwitchRow label="Show description" checked={draft.descriptionEnabled} onChange={(v) => set("descriptionEnabled", v)} />
-            <div>
-              <Label className="text-xs">Description</Label>
-              <Textarea value={draft.description} onChange={(e) => set("description", e.target.value)} className="mt-1 min-h-[72px] resize-none" />
-            </div>
-          </SectionItem>
-
-          {/* 6. Pricing */}
-          <SectionItem value="pricing" icon={DollarSign} title="Pricing">
-            <div>
-              <Label className="text-xs">Discount</Label>
-              <Select value={draft.discountType} onValueChange={(v) => set("discountType", v)}>
-                <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No discount (use product price)</SelectItem>
-                  <SelectItem value="percentage">Percentage off</SelectItem>
-                  <SelectItem value="fixed">Fixed override price</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {draft.discountType !== "none" && (
-              <div>
-                <Label className="text-xs">{draft.discountType === "percentage" ? "Discount percentage" : "Override price"}</Label>
-                <Input
-                  type="number" min="0" {...(draft.discountType === "percentage" ? { max: "100" } : {})}
-                  value={draft.discountValue ?? ""}
-                  onChange={(e) => set("discountValue", e.target.value)}
-                  className="mt-1 h-9"
-                />
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground">
-              The discounted price is shown in the offer. The item is still added at its real price at checkout unless a matching Shopify discount is configured.
-            </p>
-            <SwitchRow label="Show compare-at (was) price" checked={draft.showCompareAt} onChange={(v) => set("showCompareAt", v)} />
-            <SwitchRow label="Show savings amount" checked={draft.showSavings} onChange={(v) => set("showSavings", v)} />
-          </SectionItem>
-
-          {/* 7. Buttons */}
-          <SectionItem value="buttons" icon={MousePointerClick} title="Buttons">
-            <div>
-              <Label className="text-xs">Accept button text</Label>
-              <Input value={draft.buttonText} onChange={(e) => set("buttonText", e.target.value)} className="mt-1 h-9" />
-            </div>
-            <ColorField label="Accept button color" value={draft.buttonColor} onChange={(v) => set("buttonColor", v)} />
-            <ColorField label="Accept button hover state" value={draft.acceptButtonHoverColor} onChange={(v) => set("acceptButtonHoverColor", v)} />
-            <div className="border-t pt-3">
-              <Label className="text-xs">Decline button text</Label>
-              <Input value={draft.declineText} onChange={(e) => set("declineText", e.target.value)} className="mt-1 h-9" />
-            </div>
-            <ColorField label="Decline button color" value={draft.declineButtonColor} onChange={(v) => set("declineButtonColor", v)} />
-            <ColorField label="Decline button hover state" value={draft.declineButtonHoverColor} onChange={(v) => set("declineButtonHoverColor", v)} />
-            <div className="border-t pt-3">
-              <Label className="text-xs">Close (X) button behavior</Label>
-              <Select value={draft.closeButtonBehavior} onValueChange={(v) => set("closeButtonBehavior", v)}>
-                <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="decline">Same as Decline (dismiss offer)</SelectItem>
-                  <SelectItem value="close">Just close the popup</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </SectionItem>
-
-          {/* ── Post-purchase (OCU) sections — only for post-purchase offers ── */}
-          {type === "post-purchase" && (
-            <>
-              <SectionItem value="pp-badge" icon={Award} title="Badge">
-                <SwitchRow label="Show badge" checked={draft.badgeEnabled} onChange={(v) => set("badgeEnabled", v)} />
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+        {/* LEFT */}
+        <div className="lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto lg:pr-1">
+          {isPP ? (
+            <OcuPanel draft={draft} set={set} setES={setES} hasProduct={hasProduct} openPicker={() => setPickerOpen(true)} />
+          ) : (
+            <Accordion type="multiple" defaultValue={["headline", "product"]} className="space-y-2">
+              {/* 1. Headline */}
+              <SectionItem value="headline" icon={Heading1} title="Headline">
+                <SwitchRow label="Show headline" checked={draft.headlineEnabled} onChange={(v) => set("headlineEnabled", v)} />
                 <div>
-                  <Label className="text-xs">Badge text</Label>
-                  <Input value={draft.badgeText} onChange={(e) => set("badgeText", e.target.value)} className="mt-1 h-9" />
-                  <p className="text-xs text-muted-foreground mt-1">Renders as bold text (post-purchase color is theme-controlled).</p>
+                  <Label className="text-xs">Headline</Label>
+                  <Input value={draft.headline} onChange={(e) => set("headline", e.target.value)} className="mt-1 h-9" />
                 </div>
               </SectionItem>
 
-              <SectionItem value="pp-buttons" icon={MousePointerClick} title="Buttons layout">
+              <SectionItem value="subheadline" icon={TextCursorInput} title="Sub-headline">
+                <SwitchRow label="Show subheadline" checked={draft.subheadlineEnabled} onChange={(v) => set("subheadlineEnabled", v)} />
                 <div>
-                  <Label className="text-xs">Buttons position</Label>
-                  <Select value={draft.buttonsPosition} onValueChange={(v) => set("buttonsPosition", v)}>
+                  <Label className="text-xs">Subheadline</Label>
+                  <Input value={draft.subheadlineText} onChange={(e) => set("subheadlineText", e.target.value)} className="mt-1 h-9" />
+                </div>
+              </SectionItem>
+
+              {/* 3. Timer Bar */}
+              <SectionItem value="timer" icon={Clock} title="Timer Bar">
+                <SwitchRow label="Show countdown timer" checked={draft.timerEnabled} onChange={(v) => set("timerEnabled", v)} />
+                <div>
+                  <Label className="text-xs">Countdown length (minutes)</Label>
+                  <Input type="number" min="1" value={draft.timerDuration} onChange={(e) => set("timerDuration", e.target.value)} className="mt-1 h-9" />
+                </div>
+                <ColorField label="Timer background color" value={draft.timerBackgroundColor} onChange={(v) => set("timerBackgroundColor", v)} />
+              </SectionItem>
+
+              {/* 4. Product & Image */}
+              <SectionItem value="product" icon={Package} title="Product & Image">
+                {hasProduct ? (
+                  <div className="rounded-lg border p-3 flex items-center gap-3">
+                    <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                      {draft.imageUrl ? <img src={draft.imageUrl} alt="" className="h-full w-full object-cover" /> : <Package className="h-5 w-5 text-muted-foreground" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{draft.productTitle || "Selected product"}</p>
+                      {draft.price != null && draft.price !== "" && <p className="text-xs text-muted-foreground">${Number(draft.price).toFixed(2)}</p>}
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)}>Change</Button>
+                  </div>
+                ) : (
+                  <Button variant="outline" className="w-full justify-start h-12 text-muted-foreground" onClick={() => setPickerOpen(true)}>
+                    <Search className="h-4 w-4 mr-2" /> Select a product...
+                  </Button>
+                )}
+                <div>
+                  <Label className="text-xs">Image size</Label>
+                  <Select value={draft.imageSize} onValueChange={(v) => set("imageSize", v)}>
                     <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="stacked">Accept above decline (stacked)</SelectItem>
-                      <SelectItem value="side-by-side">Accept beside decline</SelectItem>
+                      <SelectItem value="small">Small</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="large">Large</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Image resizing</Label>
+                  <Select value={draft.imageFit} onValueChange={(v) => set("imageFit", v)}>
+                    <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cover">Fill (cover &amp; crop)</SelectItem>
+                      <SelectItem value="contain">Fit (whole image)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <SwitchRow label="Image border" checked={draft.imageBorder} onChange={(v) => set("imageBorder", v)} />
+                <SwitchRow label="Autoselect variant" checked={draft.autoselectVariant} onChange={(v) => set("autoselectVariant", v)} />
+                <SwitchRow label="Hide quantity selector" checked={draft.hideQuantitySelector} onChange={(v) => set("hideQuantitySelector", v)} />
+                <div>
+                  <Label className="text-xs">Predefined quantity</Label>
+                  <Input type="number" min="1" value={draft.predefinedQuantity} onChange={(e) => set("predefinedQuantity", e.target.value)} className="mt-1 h-9" />
+                </div>
+              </SectionItem>
+
+              {/* 5. Product Details */}
+              <SectionItem value="details" icon={ListChecks} title="Product Details">
+                <SwitchRow label="Show description" checked={draft.descriptionEnabled} onChange={(v) => set("descriptionEnabled", v)} />
+                <div>
+                  <Label className="text-xs">Description</Label>
+                  <Textarea value={draft.description} onChange={(e) => set("description", e.target.value)} className="mt-1 min-h-[72px] resize-none" />
+                </div>
+              </SectionItem>
+
+              {/* 6. Pricing */}
+              <SectionItem value="pricing" icon={DollarSign} title="Pricing">
+                <div>
+                  <Label className="text-xs">Discount</Label>
+                  <Select value={draft.discountType} onValueChange={(v) => set("discountType", v)}>
+                    <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No discount (use product price)</SelectItem>
+                      <SelectItem value="percentage">Percentage off</SelectItem>
+                      <SelectItem value="fixed">Fixed override price</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {draft.discountType !== "none" && (
+                  <div>
+                    <Label className="text-xs">{draft.discountType === "percentage" ? "Discount percentage" : "Override price"}</Label>
+                    <Input type="number" min="0" {...(draft.discountType === "percentage" ? { max: "100" } : {})} value={draft.discountValue ?? ""} onChange={(e) => set("discountValue", e.target.value)} className="mt-1 h-9" />
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  The discounted price is shown in the offer. The item is still added at its real price at checkout unless a matching Shopify discount is configured.
+                </p>
+                <SwitchRow label="Show compare-at (was) price" checked={draft.showCompareAt} onChange={(v) => set("showCompareAt", v)} />
+                <SwitchRow label="Show savings amount" checked={draft.showSavings} onChange={(v) => set("showSavings", v)} />
+              </SectionItem>
+
+              {/* 7. Buttons */}
+              <SectionItem value="buttons" icon={MousePointerClick} title="Buttons">
+                <div>
+                  <Label className="text-xs">Accept button text</Label>
+                  <Input value={draft.buttonText} onChange={(e) => set("buttonText", e.target.value)} className="mt-1 h-9" />
+                </div>
+                <ColorField label="Accept button color" value={draft.buttonColor} onChange={(v) => set("buttonColor", v)} />
+                <ColorField label="Accept button hover state" value={draft.acceptButtonHoverColor} onChange={(v) => set("acceptButtonHoverColor", v)} />
+                <div className="border-t pt-3">
+                  <Label className="text-xs">Decline button text</Label>
+                  <Input value={draft.declineText} onChange={(e) => set("declineText", e.target.value)} className="mt-1 h-9" />
+                </div>
+                <ColorField label="Decline button color" value={draft.declineButtonColor} onChange={(v) => set("declineButtonColor", v)} />
+                <ColorField label="Decline button hover state" value={draft.declineButtonHoverColor} onChange={(v) => set("declineButtonHoverColor", v)} />
+                <div className="border-t pt-3">
+                  <Label className="text-xs">Close (X) button behavior</Label>
+                  <Select value={draft.closeButtonBehavior} onValueChange={(v) => set("closeButtonBehavior", v)}>
+                    <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="decline">Same as Decline (dismiss offer)</SelectItem>
+                      <SelectItem value="close">Just close the popup</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </SectionItem>
 
-              <SectionItem value="pp-money" icon={Receipt} title="Money summary">
-                <SwitchRow label="Show subtotal / total lines" checked={draft.showMoneySummary} onChange={(v) => set("showMoneySummary", v)} details="Shows the calculated subtotal and total on the offer." />
-              </SectionItem>
-
-              <SectionItem value="pp-usp" icon={Sparkles} title="USP / benefit bullets">
-                <SwitchRow label="Show USP bullets" checked={draft.uspEnabled} onChange={(v) => set("uspEnabled", v)} />
-                <UspEditor items={draft.uspItems} onChange={(v) => set("uspItems", v)} />
-              </SectionItem>
-
-              <SectionItem value="pp-trust" icon={ShieldCheck} title="Trust badges">
-                <SwitchRow label="Show trust badges" checked={draft.trustBadgesEnabled} onChange={(v) => set("trustBadgesEnabled", v)} />
-                <StringListEditor items={draft.trustBadgeImages} onChange={(v) => set("trustBadgeImages", v)} placeholder="Badge image URL" addLabel="Add image" />
-              </SectionItem>
-
-              <SectionItem value="pp-video" icon={Video} title="Video (thumbnail)">
-                <SwitchRow label="Show video block" checked={draft.videoEnabled} onChange={(v) => set("videoEnabled", v)} details="A thumbnail image linking to the video (no inline player in post-purchase)." />
-                <div>
-                  <Label className="text-xs">Thumbnail image URL</Label>
-                  <Input value={draft.videoThumbnailUrl} onChange={(e) => set("videoThumbnailUrl", e.target.value)} className="mt-1 h-9 text-xs" />
-                </div>
-                <div>
-                  <Label className="text-xs">Video link URL</Label>
-                  <Input value={draft.videoLinkUrl} onChange={(e) => set("videoLinkUrl", e.target.value)} className="mt-1 h-9 text-xs" />
+              {/* 8. Display Offer */}
+              <SectionItem value="display" icon={Eye} title="Display Offer">
+                <SwitchRow label="Hide offer if the cart already contains the upsell product" checked={draft.hideIfInCart} onChange={(v) => set("hideIfInCart", v)} />
+                <SwitchRow label="Allow subscription option" checked={draft.allowSubscription} onChange={(v) => set("allowSubscription", v)} details="Stored for a future subscription purchase flow." />
+                <SwitchRow label="Hide offer if the cart has subscription products" checked={draft.hideIfCartHasSubscription} onChange={(v) => set("hideIfCartHasSubscription", v)} />
+                <div className="border-t pt-3">
+                  <p className="text-sm font-semibold">Trigger</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Shown when the buyer clicks Checkout in the cart. (Product-page triggers are out of scope for now.)
+                  </p>
                 </div>
               </SectionItem>
 
-              <SectionItem value="pp-blocks" icon={LayoutList} title="Content blocks">
-                <p className="text-xs text-muted-foreground">Ordered blocks shown below the offer (heading, text, divider, image, video thumbnail).</p>
-                <ContentBlocksEditor blocks={draft.contentBlocks} onChange={(v) => set("contentBlocks", v)} />
+              {/* 9. General */}
+              <SectionItem value="general" icon={Paintbrush} title="General">
+                <SwitchRow label="Inherit store font" checked={draft.inheritStoreFont} onChange={(v) => set("inheritStoreFont", v)} details="Use the theme's font instead of the one below." />
+                <div>
+                  <Label className="text-xs">Font family</Label>
+                  <Select value={draft.fontFamily} onValueChange={(v) => set("fontFamily", v)}>
+                    <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {FONT_OPTIONS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <ColorField label="Font color" value={draft.textColor} onChange={(v) => set("textColor", v)} />
+                <ColorField label="Background color" value={draft.backgroundColor} onChange={(v) => set("backgroundColor", v)} />
+                <ColorField label="Selectors color" value={draft.selectorsColor} onChange={(v) => set("selectorsColor", v)} />
+                <ColorField label="Elements color" value={draft.elementsColor} onChange={(v) => set("elementsColor", v)} />
+                <div>
+                  <Label className="text-xs">Theme</Label>
+                  <Select value={draft.themeVariant} onValueChange={(v) => set("themeVariant", v)}>
+                    <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="classic">Classic (left-aligned)</SelectItem>
+                      <SelectItem value="bold">Modern (centered)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Layout</Label>
+                  <Select value={draft.layout} onValueChange={(v) => set("layout", v)}>
+                    <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="media-left">Image left</SelectItem>
+                      <SelectItem value="media-right">Image right</SelectItem>
+                      <SelectItem value="media-top">Image on top</SelectItem>
+                      <SelectItem value="text-only">Text only (no image)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Corner radius (px)</Label>
+                  <Input type="number" min="0" max="40" value={draft.cornerRadius} onChange={(e) => set("cornerRadius", e.target.value)} className="mt-1 h-9" />
+                </div>
               </SectionItem>
-            </>
+            </Accordion>
           )}
-
-          {/* 8. Display Offer (popup only) */}
-          {type !== "post-purchase" && (
-            <SectionItem value="display" icon={Eye} title="Display Offer">
-              <SwitchRow label="Hide offer if the cart already contains the upsell product" checked={draft.hideIfInCart} onChange={(v) => set("hideIfInCart", v)} />
-              <SwitchRow label="Allow subscription option" checked={draft.allowSubscription} onChange={(v) => set("allowSubscription", v)} details="Stored for a future subscription purchase flow." />
-              <SwitchRow label="Hide offer if the cart has subscription products" checked={draft.hideIfCartHasSubscription} onChange={(v) => set("hideIfCartHasSubscription", v)} />
-              <div className="border-t pt-3">
-                <p className="text-sm font-semibold">Trigger</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Shown when the buyer clicks Checkout in the cart. (Product-page triggers are out of scope for now.)
-                </p>
-              </div>
-            </SectionItem>
-          )}
-
-          {/* 9. General (popup only) */}
-          {type !== "post-purchase" && (
-          <SectionItem value="general" icon={Paintbrush} title="General">
-            <SwitchRow label="Inherit store font" checked={draft.inheritStoreFont} onChange={(v) => set("inheritStoreFont", v)} details="Use the theme's font instead of the one below." />
-            <div>
-              <Label className="text-xs">Font family</Label>
-              <Select value={draft.fontFamily} onValueChange={(v) => set("fontFamily", v)}>
-                <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {FONT_OPTIONS.map((f) => (
-                    <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <ColorField label="Font color" value={draft.textColor} onChange={(v) => set("textColor", v)} />
-            <ColorField label="Background color" value={draft.backgroundColor} onChange={(v) => set("backgroundColor", v)} />
-            <ColorField label="Selectors color" value={draft.selectorsColor} onChange={(v) => set("selectorsColor", v)} />
-            <ColorField label="Elements color" value={draft.elementsColor} onChange={(v) => set("elementsColor", v)} />
-            <div>
-              <Label className="text-xs">Theme</Label>
-              <Select value={draft.themeVariant} onValueChange={(v) => set("themeVariant", v)}>
-                <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="classic">Classic (left-aligned)</SelectItem>
-                  <SelectItem value="bold">Modern (centered)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Layout</Label>
-              <Select value={draft.layout} onValueChange={(v) => set("layout", v)}>
-                <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="media-left">Image left</SelectItem>
-                  <SelectItem value="media-right">Image right</SelectItem>
-                  <SelectItem value="media-top">Image on top</SelectItem>
-                  <SelectItem value="text-only">Text only (no image)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Corner radius (px)</Label>
-              <Input type="number" min="0" max="40" value={draft.cornerRadius} onChange={(e) => set("cornerRadius", e.target.value)} className="mt-1 h-9" />
-            </div>
-          </SectionItem>
-          )}
-        </Accordion>
+        </div>
 
         {/* RIGHT: sticky live preview + device toggle */}
         <div className="lg:sticky lg:top-4 self-start space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold">{DEVICES.find((d) => d.id === device)?.label} preview</p>
+          <div className="flex items-center justify-between gap-2">
+            {isPP ? (
+              <Select value={draft.editorSettings.previewType} onValueChange={(v) => setDraft((d) => ({ ...d, editorSettings: { ...d.editorSettings, previewType: v } }))}>
+                <SelectTrigger className="h-8 w-[220px] text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="one_time_and_sub">One-time purchase &amp; Subscription</SelectItem>
+                  <SelectItem value="subscription_only">Subscription only</SelectItem>
+                  <SelectItem value="prepaid_sub">Pre-paid subscription</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-sm font-semibold">{DEVICES.find((d) => d.id === device)?.label} preview</p>
+            )}
             <div className="flex items-center gap-1">
               {DEVICES.map((d) => {
                 const Icon = DEVICE_ICONS[d.id];
                 return (
-                  <Button
-                    key={d.id}
-                    variant={device === d.id ? "secondary" : "ghost"}
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => setDevice(d.id)}
-                    aria-label={`${d.label} preview`}
-                  >
+                  <Button key={d.id} variant={device === d.id ? "secondary" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setDevice(d.id)} aria-label={`${d.label} preview`}>
                     <Icon className="h-4 w-4" />
                   </Button>
                 );
               })}
             </div>
           </div>
-          {type === "post-purchase" ? (
-            <PostPurchasePreview offer={draft} device={device} />
+          {isPP ? (
+            <>
+              <div className="rounded-md border bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                This preview uses a product placeholder. To see how your product appears on the live offer page,{" "}
+                <button type="button" className="underline" onClick={() => setPickerOpen(true)}>select a product to preview</button>.
+              </div>
+              <PostPurchasePreview offer={draft} device={device} storeName={storeName} />
+            </>
           ) : (
             <OfferPreview offer={draft} device={device} />
           )}

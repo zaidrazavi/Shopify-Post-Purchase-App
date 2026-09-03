@@ -3,6 +3,15 @@
 // design (blue CTA, orange badge, gray countdown bar). The LIVE storefront page
 // inherits the merchant's Shopify checkout colors (remote-ui limitation) — this
 // preview shows the intended structure/branding.
+//
+// It reads two things off the offer:
+//   • flat functional fields (price, badgeEnabled, timerEnabled, buttonsPosition,
+//     showMoneySummary, videoEnabled, contentBlocks, …) — these drive the live
+//     extension too, and
+//   • offer.editorSettings — OCU cosmetics (per-section paddings, background
+//     colors, badge color/position, text&video layout, hide subtotal/total…).
+//     These are preview-authoritative; the theme-locked live page honors the
+//     subset it structurally can.
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
 
@@ -31,14 +40,21 @@ function pricing(o) {
   };
 }
 const money = (v) => (v == null || v === "" ? "" : `$${v}`);
+// Slider percent (0–100) → a comfortable px value for the preview.
+const padPx = (v) => Math.round((Number(v) || 0) * 0.32);
+const IMG_WIDTH = { small: "30%", medium: "40%", large: "52%" };
 
 const BLUE = "#1773b0";
-const ORANGE = "#E8632A";
 const INK = "#1a1a1a";
 const SUBTLE = "#6b7177";
 
-export function PostPurchasePreview({ offer, device }) {
+export function PostPurchasePreview({ offer, device, storeName }) {
   const o = offer || {};
+  const es = o.editorSettings && typeof o.editorSettings === "object" ? o.editorSettings : {};
+  const esHeading = es.heading || {};
+  const esCountdown = es.countdown || {};
+  const esProduct = es.product || {};
+  const esTV = es.textVideo || {};
   const dev = DEVICES.find((d) => d.id === device) || DEVICES[0];
   const targetWidth = dev.width;
   const narrow = device === "mobile";
@@ -69,6 +85,25 @@ export function PostPurchasePreview({ offer, device }) {
   const blocks = Array.isArray(o.contentBlocks)
     ? [...o.contentBlocks].sort((a, b) => (a?.position ?? 0) - (b?.position ?? 0))
     : [];
+
+  const badgeColor = esProduct.badgeColor || "#E8632A";
+  const badgePos = esProduct.badgePosition || "above_title";
+  const useIcon = esProduct.useIcon !== false;
+  const imgWidth = narrow ? "100%" : IMG_WIDTH[o.imageSize] || "40%";
+  const imgFit = o.imageFit === "cover" ? "cover" : "contain";
+
+  const badgeEl =
+    o.badgeEnabled && badgePos !== "none" ? (
+      <div
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 5,
+          background: `${badgeColor}22`, color: badgeColor, fontSize: 12, fontWeight: 700,
+          padding: "3px 9px", borderRadius: 5,
+        }}
+      >
+        {useIcon ? "🏆 " : ""}{o.badgeText || "Bestseller"}
+      </div>
+    ) : null;
 
   const acceptBtn = (
     <div
@@ -102,6 +137,34 @@ export function PostPurchasePreview({ offer, device }) {
     return null;
   };
 
+  // Text & Video content section (headline + copy + optional video thumb).
+  const tvLayout = esTV.layout || "center"; // left | center | right (video side)
+  const showVideo = o.videoEnabled && o.videoThumbnailUrl;
+  const videoThumb = showVideo ? (
+    <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+      <img src={o.videoThumbnailUrl} alt="" style={{ width: "100%", borderRadius: 10, display: "block" }} />
+      {!esTV.hidePlayIcon ? (
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(255,255,255,0.9)", color: INK, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>▶</div>
+        </div>
+      ) : null}
+      {esTV.playButtonLabel ? (
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 10, textAlign: "center", color: "#fff", fontSize: 12, textShadow: "0 1px 2px rgba(0,0,0,.6)" }}>{esTV.playButtonLabel}</div>
+      ) : null}
+    </div>
+  ) : null;
+
+  const tvCopy = (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      {esTV.headline !== false ? <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Headline</div> : null}
+      <div style={{ fontSize: 14, color: SUBTLE, lineHeight: 1.55 }}>
+        Give a detailed description of a specific feature or benefit of your product.
+      </div>
+    </div>
+  );
+
+  const showTextVideo = showVideo || esTV.headline !== false || blocks.length;
+
   return (
     <div style={{ background: "#f6f6f7", padding: 16, borderRadius: 8, overflow: "hidden" }}>
       <div ref={panelRef} style={{ display: "flex", justifyContent: "center" }}>
@@ -115,49 +178,64 @@ export function PostPurchasePreview({ offer, device }) {
         >
           {/* Order-status chrome */}
           <div style={{ padding: "16px 24px", borderBottom: "1px solid #eee" }}>
-            <div style={{ fontSize: 18, fontWeight: 600 }}>{o.productTitle ? "Your store" : "Your store"}</div>
+            <div style={{ fontSize: 18, fontWeight: 600 }}>{storeName || "Your store"}</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, color: SUBTLE, fontSize: 13 }}>
               <span style={{ color: BLUE }}>✓</span> You&apos;ve paid for your order.
             </div>
             <div style={{ color: BLUE, fontSize: 13, marginTop: 2 }}>View order confirmation ›</div>
           </div>
 
+          {/* Heading */}
+          <div
+            style={{
+              textAlign: "center", fontSize: 17, fontWeight: 700,
+              background: esHeading.bg || "transparent",
+              paddingTop: padPx(esHeading.top ?? 40) + 10, paddingBottom: padPx(esHeading.bottom ?? 20) + 10,
+              paddingLeft: 24, paddingRight: 24,
+            }}
+          >
+            {header}
+          </div>
+
           {/* Countdown bar */}
           {o.timerEnabled ? (
-            <div style={{ background: "#f4f4f5", textAlign: "center", padding: "10px", fontSize: 14, borderBottom: "1px solid #eee" }}>
+            <div
+              style={{
+                background: esCountdown.bg || "#f4f4f5", textAlign: "center", fontSize: 14,
+                borderBottom: "1px solid #eee",
+                paddingTop: padPx(esCountdown.top ?? 50) + 6, paddingBottom: padPx(esCountdown.bottom ?? 30) + 6,
+                marginLeft: esCountdown.fullWidth ? 0 : 0,
+              }}
+            >
               Exclusive offer expires in: <span style={{ fontWeight: 700 }}>{mins}:00</span>
             </div>
           ) : null}
 
-          <div style={{ padding: "22px 24px" }}>
-            {/* Centered header */}
-            <div style={{ textAlign: "center", fontSize: 17, fontWeight: 700, marginBottom: 18 }}>{header}</div>
-
-            {/* Product row: image left / buy box right */}
+          {/* Upsell product */}
+          <div style={{ paddingTop: padPx(esProduct.top ?? 50) + 12, paddingBottom: padPx(esProduct.bottom ?? 40) + 12, paddingLeft: 24, paddingRight: 24 }}>
             <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexDirection: narrow ? "column" : "row" }}>
-              <div style={{ flex: narrow ? "1 1 auto" : "0 0 40%", width: narrow ? "100%" : "40%" }}>
+              <div style={{ flex: narrow ? "1 1 auto" : `0 0 ${imgWidth}`, width: imgWidth }}>
                 {o.imageUrl ? (
-                  <img src={o.imageUrl} alt={o.productTitle || ""} style={{ width: "100%", objectFit: "contain", borderRadius: 8, border: "1px solid #eee", display: "block" }} />
+                  <img src={o.imageUrl} alt={o.productTitle || ""} style={{ width: "100%", objectFit: imgFit, borderRadius: 8, border: o.imageBorder ? "1px solid #eee" : "none", display: "block" }} />
                 ) : (
                   <div style={{ width: "100%", aspectRatio: "1", background: "#f0f0f0", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "#aaa", fontSize: 13 }}>No image</div>
                 )}
               </div>
 
               <div style={{ flex: 1, minWidth: 0 }}>
-                {o.badgeEnabled ? (
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "#fdece4", color: ORANGE, fontSize: 12, fontWeight: 700, padding: "3px 9px", borderRadius: 5, marginBottom: 8 }}>
-                    🏆 {o.badgeText || "Bestseller"}
-                  </div>
-                ) : null}
+                {badgePos === "above_title" && badgeEl ? <div style={{ marginBottom: 8 }}>{badgeEl}</div> : null}
 
                 <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{o.productTitle || "Product Title"}</div>
 
+                {badgePos === "under_title" && badgeEl ? <div style={{ marginBottom: 6 }}>{badgeEl}</div> : null}
+
                 <div style={{ display: "flex", gap: 8, alignItems: "baseline", marginBottom: 6 }}>
-                  {p.compare ? <span style={{ textDecoration: "line-through", color: SUBTLE }}>{money(p.compare)}</span> : null}
+                  {o.showCompareAt && p.compare ? <span style={{ textDecoration: "line-through", color: SUBTLE }}>{money(p.compare)}</span> : null}
                   <span style={{ fontSize: 20, fontWeight: 700 }}>{money(p.final)}</span>
+                  {badgePos === "next_to_price" && badgeEl ? badgeEl : null}
                 </div>
 
-                {o.description ? <div style={{ fontSize: 13, color: SUBTLE, lineHeight: 1.45, marginBottom: 12 }}>{o.description}</div> : null}
+                {o.descriptionEnabled && o.description ? <div style={{ fontSize: 13, color: SUBTLE, lineHeight: 1.45, marginBottom: 12 }}>{o.description}</div> : null}
 
                 {/* USP bullets */}
                 {o.uspEnabled && uspItems.length ? (
@@ -174,12 +252,21 @@ export function PostPurchasePreview({ offer, device }) {
                 {/* Money summary */}
                 {o.showMoneySummary ? (
                   <div style={{ borderTop: "1px solid #eee", paddingTop: 10, marginBottom: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                      <span style={{ color: SUBTLE }}>Subtotal</span><span>{money(p.final)}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700 }}>
-                      <span>Total</span><span>USD {money(p.final)}</span>
-                    </div>
+                    {!esProduct.hideSubtotalLine ? (
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                        <span style={{ color: SUBTLE }}>Subtotal</span><span>{money(p.final)}</span>
+                      </div>
+                    ) : null}
+                    {esProduct.shipping === "charge" && !esProduct.hideShippingLine ? (
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                        <span style={{ color: SUBTLE }}>Shipping</span><span>Calculated at checkout</span>
+                      </div>
+                    ) : null}
+                    {!esProduct.hideTotalLine ? (
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700 }}>
+                        <span>Total</span><span>USD {money(p.final)}</span>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -189,7 +276,13 @@ export function PostPurchasePreview({ offer, device }) {
                   <div style={{ flex: sideBySide ? "0 0 auto" : undefined }}>{declineBtn}</div>
                 </div>
 
-                {/* Trust badges — only when images are actually set (matches live) */}
+                {esProduct.paymentDisclaimer ? (
+                  <div style={{ fontSize: 11, color: SUBTLE, textAlign: "center", marginTop: 8 }}>
+                    Your payment method will be charged for this additional purchase.
+                  </div>
+                ) : null}
+
+                {/* Trust badges (USP Image) — only when images set (matches live) */}
                 {o.trustBadgesEnabled && trust.length ? (
                   <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
                     {trust.map((src, i) => (
@@ -199,15 +292,38 @@ export function PostPurchasePreview({ offer, device }) {
                 ) : null}
               </div>
             </div>
-
-            {/* Video block + content blocks below */}
-            {(o.videoEnabled && o.videoThumbnailUrl) || blocks.length ? (
-              <div style={{ marginTop: 22, paddingTop: 18, borderTop: "1px solid #eee", display: "flex", flexDirection: "column", gap: 14 }}>
-                {o.videoEnabled && o.videoThumbnailUrl ? <Block b={{ type: "video", thumbnailUrl: o.videoThumbnailUrl, linkUrl: o.videoLinkUrl }} i="v" /> : null}
-                {blocks.map((b, i) => <Block key={i} b={b} i={i} />)}
-              </div>
-            ) : null}
           </div>
+
+          {/* Text & Video + content blocks */}
+          {showTextVideo ? (
+            <div
+              style={{
+                borderTop: "1px solid #eee",
+                paddingTop: padPx(esTV.top ?? 50) + 12, paddingBottom: padPx(esTV.bottom ?? 30) + 12,
+                paddingLeft: 24, paddingRight: 24,
+                display: "flex", flexDirection: "column", gap: 14,
+              }}
+            >
+              {(showVideo || esTV.headline !== false) ? (
+                <div
+                  style={{
+                    display: "flex", gap: 18, alignItems: "flex-start",
+                    flexDirection: narrow ? "column" : tvLayout === "left" ? "row-reverse" : "row",
+                  }}
+                >
+                  {tvLayout === "center" && !narrow ? (
+                    <div style={{ flex: 1, textAlign: "center" }}>{tvCopy}{showVideo ? <div style={{ marginTop: 14 }}>{videoThumb}</div> : null}</div>
+                  ) : (
+                    <>
+                      {tvCopy}
+                      {videoThumb}
+                    </>
+                  )}
+                </div>
+              ) : null}
+              {blocks.map((b, i) => <Block key={i} b={b} i={i} />)}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
