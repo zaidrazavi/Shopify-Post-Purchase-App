@@ -88,8 +88,6 @@ function savePercent(offer) {
   return Math.round((1 - price / compareAt) * 100);
 }
 
-const money = (bag) => bag?.presentmentMoney?.amount ?? "";
-
 // One content block from payload.contentBlocks → a remote-ui element.
 function renderBlock(b, i) {
   if (!b || typeof b !== "object") return null;
@@ -369,7 +367,7 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
 
       {offer.headline ? (
         <BlockStack spacing="tight" alignment="center">
-          <Heading>{offer.headline}</Heading>
+          <Text size="large" emphasized>{offer.headline}</Text>
         </BlockStack>
       ) : null}
 
@@ -405,20 +403,16 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
 
           {error ? <TextBlock appearance="critical">{error}</TextBlock> : null}
 
-          {offer.showMoneySummary && !loading && calculatedPurchase ? (
+          {offer.showMoneySummary ? (
             <BlockStack spacing="tight">
               <Separator />
               <Bookend trailing>
                 <Text subdued>Subtotal</Text>
-                <Text>
-                  {money(calculatedPurchase.subtotalPriceSet)} {displayCurrency}
-                </Text>
+                <Text>{finalPrice} {displayCurrency}</Text>
               </Bookend>
               <Bookend trailing>
                 <Text emphasized>Total</Text>
-                <Text emphasized>
-                  {money(calculatedPurchase.totalPriceSet)} {displayCurrency}
-                </Text>
+                <Text emphasized>{finalPrice} {displayCurrency}</Text>
               </Bookend>
             </BlockStack>
           ) : null}

@@ -157,12 +157,7 @@ export function PostPurchasePreview({ offer, device }) {
                   <span style={{ fontSize: 20, fontWeight: 700 }}>{money(p.final)}</span>
                 </div>
 
-                {o.description ? <div style={{ fontSize: 13, color: SUBTLE, lineHeight: 1.45, marginBottom: 10 }}>{o.description}</div> : null}
-
-                {/* Variant selector (display) */}
-                <div style={{ border: "1px solid #d9d9d9", borderRadius: 6, padding: "8px 10px", fontSize: 13, color: SUBTLE, display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                  <span>Product Variant</span><span>▾</span>
-                </div>
+                {o.description ? <div style={{ fontSize: 13, color: SUBTLE, lineHeight: 1.45, marginBottom: 12 }}>{o.description}</div> : null}
 
                 {/* USP bullets */}
                 {o.uspEnabled && uspItems.length ? (
@@ -194,16 +189,12 @@ export function PostPurchasePreview({ offer, device }) {
                   <div style={{ flex: sideBySide ? "0 0 auto" : undefined }}>{declineBtn}</div>
                 </div>
 
-                {/* Trust badges */}
-                {o.trustBadgesEnabled ? (
+                {/* Trust badges — only when images are actually set (matches live) */}
+                {o.trustBadgesEnabled && trust.length ? (
                   <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
-                    {(trust.length ? trust : [0, 1, 2, 3]).map((src, i) =>
-                      typeof src === "string" ? (
-                        <img key={i} src={src} alt="" style={{ height: 34, objectFit: "contain" }} />
-                      ) : (
-                        <div key={i} style={{ width: 34, height: 34, borderRadius: "50%", border: "2px solid #dcdcdc" }} />
-                      ),
-                    )}
+                    {trust.map((src, i) => (
+                      <img key={i} src={src} alt="" style={{ height: 34, objectFit: "contain" }} />
+                    ))}
                   </div>
                 ) : null}
               </div>
