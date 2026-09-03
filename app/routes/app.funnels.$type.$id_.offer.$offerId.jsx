@@ -41,6 +41,7 @@ import {
   Heading1, TextCursorInput, Clock, ListChecks, DollarSign, MousePointerClick, Eye, Paintbrush,
   Video, LayoutList, Plus, Trash2, ArrowUp, ArrowDown,
   HelpCircle, Type, Image as ImageIcon, Minus, PanelLeft, PanelRight, AlignCenter,
+  ShoppingCart, MoreVertical, GripVertical, Images,
 } from "lucide-react";
 
 const VALID_TYPES = ["pre-purchase", "post-purchase", "thank-you"];
@@ -78,6 +79,7 @@ function withEditorDefaults(es) {
       offerDescription: p.offerDescription ?? true,
       offerProduct: p.offerProduct ?? "same_variant",
       displayFor: p.displayFor ?? "random_in_cart",
+      predefinedQtyEnabled: p.predefinedQtyEnabled ?? false,
       useIcon: p.useIcon ?? true,
       badgeColor: p.badgeColor ?? "#F4A460",
       badgePosition: p.badgePosition ?? "above_title",
@@ -103,7 +105,8 @@ function withEditorDefaults(es) {
 
 // Apply the old popup editor's defaults where an Offer column is null, so the
 // controls + preview are stable and a save persists concrete values.
-function normalizeOffer(o) {
+function normalizeOffer(o, type) {
+  const isPP = type === "post-purchase";
   return {
     ...o,
     headline: o.headline ?? "",
@@ -125,10 +128,10 @@ function normalizeOffer(o) {
     discountValue: o.discountValue ?? "",
     showCompareAt: o.showCompareAt ?? true,
     showSavings: o.showSavings ?? true,
-    buttonText: o.buttonText ?? "Add to my order",
+    buttonText: o.buttonText ?? (isPP ? "Complete Purchase" : "Add to my order"),
     buttonColor: o.buttonColor ?? "#EF6E7B",
     acceptButtonHoverColor: o.acceptButtonHoverColor ?? "#C85A66",
-    declineText: o.declineText ?? "No thanks",
+    declineText: o.declineText ?? (isPP ? "Decline this offer" : "No thanks"),
     declineButtonColor: o.declineButtonColor ?? "#6D7175",
     declineButtonHoverColor: o.declineButtonHoverColor ?? "#55585B",
     closeButtonBehavior: o.closeButtonBehavior ?? "decline",
@@ -152,7 +155,7 @@ function normalizeOffer(o) {
     uspItems: Array.isArray(o.uspItems) ? o.uspItems : [],
     trustBadgesEnabled: o.trustBadgesEnabled ?? false,
     trustBadgeImages: Array.isArray(o.trustBadgeImages) ? o.trustBadgeImages : [],
-    showMoneySummary: o.showMoneySummary ?? false,
+    showMoneySummary: o.showMoneySummary ?? (isPP ? true : false),
     videoEnabled: o.videoEnabled ?? false,
     videoThumbnailUrl: o.videoThumbnailUrl ?? "",
     videoLinkUrl: o.videoLinkUrl ?? "",
@@ -162,7 +165,7 @@ function normalizeOffer(o) {
 }
 
 export const loader = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const { type, id, offerId } = params;
   if (!VALID_TYPES.includes(type)) throw new Response("Not Found", { status: 404 });
@@ -181,7 +184,18 @@ export const loader = async ({ request, params }) => {
   if (!dbError && (!offer || !funnel || offer.funnelId !== funnel.id)) {
     throw new Response("Not Found", { status: 404 });
   }
-  return { offer, funnel, type, dbError, shop };
+
+  // Real shop display name for the preview chrome (falls back to the domain slug).
+  let storeName = shop.replace(/\.myshopify\.com$/, "");
+  try {
+    const res = await admin.graphql("{ shop { name } }");
+    const j = await res.json();
+    if (j?.data?.shop?.name) storeName = j.data.shop.name;
+  } catch {
+    // non-fatal — keep the slug fallback
+  }
+
+  return { offer, funnel, type, dbError, shop, storeName };
 };
 
 const STR_FIELDS = [
@@ -396,12 +410,18 @@ function CountedInput({ label, value, onChange, max, placeholder, help }) {
   );
 }
 
-function SectionItem({ value, icon: Icon, title, children }) {
+function SectionItem({ value, icon: Icon, title, children, actions }) {
   return (
-    <AccordionItem value={value} className="border rounded-lg px-3">
+    <AccordionItem value={value} className="group border rounded-lg px-3">
       <AccordionTrigger className="text-sm font-medium">
-        <span className="flex items-center gap-2">
+        <span className="flex flex-1 items-center gap-2">
           <Icon className="h-4 w-4 text-muted-foreground" /> {title}
+          {actions ? (
+            // eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
+            <span className="ml-auto mr-2 flex items-center gap-2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+              {actions}
+            </span>
+          ) : null}
         </span>
       </AccordionTrigger>
       <AccordionContent>
@@ -454,11 +474,15 @@ function UspEditor({ items, onChange }) {
 }
 
 const BLOCK_TYPES = [
+  { value: "text_image", label: "Text and image", icon: Images },
+  { value: "text_video", label: "Text and video", icon: Images },
   { value: "heading", label: "Heading", icon: Heading1 },
   { value: "text", label: "Text", icon: Type },
   { value: "image", label: "Image", icon: ImageIcon },
   { value: "video", label: "Video", icon: Video, isNew: true },
   { value: "divider", label: "Divider", icon: Minus },
+  { value: "countdown", label: "Countdown timer", icon: Clock },
+  { value: "buybox", label: "Buy box", icon: ShoppingCart },
 ];
 
 function ContentBlocksEditor({ blocks, onChange }) {
@@ -491,11 +515,26 @@ function ContentBlocksEditor({ blocks, onChange }) {
           {b.type === "image" && (
             <Input value={b.imageUrl ?? ""} onChange={(e) => setAt(i, { imageUrl: e.target.value })} placeholder="Image URL" className="h-8 text-xs" />
           )}
-          {b.type === "video" && (
+          {(b.type === "video" || b.type === "text_video") && (
             <>
+              {b.type === "text_video" && (
+                <Input value={b.text ?? ""} onChange={(e) => setAt(i, { text: e.target.value })} placeholder="Text" className="h-8 text-xs" />
+              )}
               <Input value={b.thumbnailUrl ?? ""} onChange={(e) => setAt(i, { thumbnailUrl: e.target.value })} placeholder="Thumbnail image URL" className="h-8 text-xs" />
               <Input value={b.linkUrl ?? ""} onChange={(e) => setAt(i, { linkUrl: e.target.value })} placeholder="Video link (opens external)" className="h-8 text-xs" />
             </>
+          )}
+          {b.type === "text_image" && (
+            <>
+              <Input value={b.text ?? ""} onChange={(e) => setAt(i, { text: e.target.value })} placeholder="Text" className="h-8 text-xs" />
+              <Input value={b.imageUrl ?? ""} onChange={(e) => setAt(i, { imageUrl: e.target.value })} placeholder="Image URL" className="h-8 text-xs" />
+            </>
+          )}
+          {b.type === "countdown" && (
+            <Input type="number" min="1" value={b.minutes ?? 10} onChange={(e) => setAt(i, { minutes: e.target.value })} placeholder="Minutes" className="h-8 text-xs" />
+          )}
+          {b.type === "buybox" && (
+            <p className="text-[11px] text-muted-foreground">Repeats the accept button with the offer price.</p>
           )}
         </div>
       ))}
@@ -544,7 +583,8 @@ function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
         <SwitchRow label="Allow subscription option" checked={es.displayOffer.allowSubscription} onChange={(v) => setES("displayOffer", "allowSubscription", v)} help="Offer a Subscribe & save choice alongside one-time purchase." />
         <SwitchRow label="Offer subscription only, if product initially purchased as a one-time" checked={es.displayOffer.subscriptionOnlyIfOneTime} onChange={(v) => setES("displayOffer", "subscriptionOnlyIfOneTime", v)} help="Show the subscription variant only when the initial purchase was one-time." />
         <div className="rounded-md bg-muted/60 p-2 text-xs text-muted-foreground">
-          Your live post-purchase offers automatically inherit your Shopify checkout styles. Colors, fonts and per-section padding below shape this preview; the live page follows the checkout theme.
+          Your live post-purchase offers automatically inherit your Shopify checkout styles.{" "}
+          <span className="text-blue-600">Configure preview settings</span> to better match this preview.
         </div>
       </SectionItem>
 
@@ -561,7 +601,23 @@ function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
       </SectionItem>
 
       {/* 3. Countdown Timer */}
-      <SectionItem value="pp-timer" icon={Clock} title="Countdown Timer">
+      <SectionItem
+        value="pp-timer"
+        icon={Clock}
+        title="Countdown Timer"
+        actions={
+          <>
+            <Trash2 className="h-3.5 w-3.5 cursor-not-allowed opacity-50" />
+            <Eye
+              className={`h-3.5 w-3.5 cursor-pointer ${draft.timerEnabled ? "" : "opacity-40"}`}
+              onClick={() => set("timerEnabled", !draft.timerEnabled)}
+              role="button"
+              aria-label="Toggle countdown timer"
+            />
+            <GripVertical className="h-3.5 w-3.5 cursor-grab" />
+          </>
+        }
+      >
         <SwitchRow label="Show countdown timer" checked={draft.timerEnabled} onChange={(v) => set("timerEnabled", v)} />
         <ColorSwatchRow label="Background Color" value={es.countdown.bg} onChange={(v) => setES("countdown", "bg", v)} />
         <SwitchRow label="Full width" checked={es.countdown.fullWidth} onChange={(v) => setES("countdown", "fullWidth", v)} />
@@ -602,6 +658,30 @@ function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
         {draft.descriptionEnabled ? (
           <Textarea value={draft.description} onChange={(e) => set("description", e.target.value)} placeholder="Product description" className="min-h-[60px] resize-none text-xs" />
         ) : null}
+        <div>
+          <Label className="text-xs">Offer Product</Label>
+          <Select value={es.product.offerProduct} onValueChange={(v) => setES("product", "offerProduct", v)}>
+            <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="same_variant">Same Variant</SelectItem>
+              <SelectItem value="specific_product">Specific product</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <div className="flex items-center gap-1">
+            <Label className="text-xs">Display offer</Label>
+            <Help text="Which cart product this upsell targets when it runs." />
+          </div>
+          <Select value={es.product.displayFor} onValueChange={(v) => setES("product", "displayFor", v)}>
+            <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="random_in_cart">for random product in the cart</SelectItem>
+              <SelectItem value="most_expensive">for most expensive product in the cart</SelectItem>
+              <SelectItem value="cheapest">for cheapest product in the cart</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* Image */}
         <div className="border-t pt-3 space-y-3">
@@ -615,7 +695,14 @@ function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
           <SwitchRow label="Badge" checked={draft.badgeEnabled} onChange={(v) => set("badgeEnabled", v)} />
           <div>
             <Label className="text-xs">Badge Label</Label>
-            <Input value={draft.badgeText} onChange={(e) => set("badgeText", e.target.value)} placeholder="Bestseller" className="mt-1 h-9" />
+            <Select value={draft.badgeText} onValueChange={(v) => set("badgeText", v)}>
+              <SelectTrigger className="mt-1 h-9"><SelectValue placeholder="Bestseller" /></SelectTrigger>
+              <SelectContent>
+                {["Bestseller", "Best Value", "Most Popular", "Limited Offer"].map((l) => (
+                  <SelectItem key={l} value={l}>{l}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <SwitchRow label="Use Icon" checked={es.product.useIcon} onChange={(v) => setES("product", "useIcon", v)} help="Show a trophy icon before the badge text." />
           <ColorSwatchRow label="Badge Color" value={es.product.badgeColor} onChange={(v) => setES("product", "badgeColor", v)} />
@@ -637,12 +724,11 @@ function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
         <div className="border-t pt-3 space-y-3">
           <div>
             <Label className="text-xs">Discount</Label>
-            <Select value={draft.discountType} onValueChange={(v) => set("discountType", v)}>
+            <Select value={draft.discountType === "fixed" ? "percentage" : draft.discountType} onValueChange={(v) => set("discountType", v)}>
               <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None</SelectItem>
                 <SelectItem value="percentage">Percentage</SelectItem>
-                <SelectItem value="fixed">Fixed override price</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -670,22 +756,15 @@ function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
           {es.product.shipping === "free" ? (
             <SwitchRow label="Hide Shipping line for Free Shipping" checked={es.product.hideShippingLine} onChange={(v) => setES("product", "hideShippingLine", v)} />
           ) : null}
-          <SwitchRow label="Show money summary (Subtotal / Total)" checked={draft.showMoneySummary} onChange={(v) => set("showMoneySummary", v)} />
-          {draft.showMoneySummary ? (
-            <>
-              <SwitchRow label="Hide Subtotal line" checked={es.product.hideSubtotalLine} onChange={(v) => setES("product", "hideSubtotalLine", v)} isNew />
-              <SwitchRow label="Hide Total line" checked={es.product.hideTotalLine} onChange={(v) => setES("product", "hideTotalLine", v)} isNew />
-            </>
-          ) : null}
+          <SwitchRow label="Hide Subtotal line" checked={es.product.hideSubtotalLine} onChange={(v) => setES("product", "hideSubtotalLine", v)} isNew />
+          <SwitchRow label="Hide Total line" checked={es.product.hideTotalLine} onChange={(v) => setES("product", "hideTotalLine", v)} isNew />
         </div>
 
         {/* Quantity */}
         <div className="border-t pt-3 space-y-3">
           <SwitchRow label="Hide Quantity Selector" checked={draft.hideQuantitySelector} onChange={(v) => set("hideQuantitySelector", v)} />
-          <div>
-            <Label className="text-xs">Predefined Quantity</Label>
-            <Input type="number" min="1" value={draft.predefinedQuantity} onChange={(e) => set("predefinedQuantity", e.target.value)} className="mt-1 h-9" />
-          </div>
+          <SwitchRow label="Predefined Quantity" checked={es.product.predefinedQtyEnabled} onChange={(v) => setES("product", "predefinedQtyEnabled", v)} help="Add a fixed quantity of the upsell item instead of 1." />
+          <Input type="number" min="1" value={draft.predefinedQuantity} onChange={(e) => set("predefinedQuantity", e.target.value)} disabled={!es.product.predefinedQtyEnabled} className="h-9" />
         </div>
 
         {/* Buttons */}
@@ -739,19 +818,27 @@ function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
         />
         <SwitchRow label="Show video block" checked={draft.videoEnabled} onChange={(v) => set("videoEnabled", v)} details="A thumbnail linking to the video (no inline player in post-purchase)." />
         <div>
-          <Label className="text-xs">Video Source</Label>
+          <div className="flex items-center gap-1">
+            <Label className="text-xs">Video Source</Label>
+            <Help text="Paste a YouTube/Vimeo link. On the live page it opens externally (no inline player in post-purchase)." />
+          </div>
           <Input value={draft.videoLinkUrl} onChange={(e) => set("videoLinkUrl", e.target.value)} placeholder="https://youtube.com/watch?..." className="mt-1 h-9 text-xs" />
         </div>
         <div>
-          <Label className="text-xs">Thumbnail image URL</Label>
-          <Input value={draft.videoThumbnailUrl} onChange={(e) => set("videoThumbnailUrl", e.target.value)} placeholder="https://..." className="mt-1 h-9 text-xs" />
+          <Label className="text-xs">Thumbnail</Label>
+          <div className="mt-1 flex items-center gap-2">
+            <div className="h-9 w-12 shrink-0 overflow-hidden rounded border bg-muted">
+              {draft.videoThumbnailUrl ? <img src={draft.videoThumbnailUrl} alt="" className="h-full w-full object-cover" /> : null}
+            </div>
+            <Input value={draft.videoThumbnailUrl} onChange={(e) => set("videoThumbnailUrl", e.target.value)} placeholder="Thumbnail image URL" className="h-9 text-xs" />
+          </div>
         </div>
-        <CountedInput label="Play Button label" value={es.textVideo.playButtonLabel} onChange={(v) => setES("textVideo", "playButtonLabel", v)} max={25} placeholder="Watch video" />
+        <CountedInput label="Play Button label" value={es.textVideo.playButtonLabel} onChange={(v) => setES("textVideo", "playButtonLabel", v)} max={25} placeholder="Watch video" help="Text shown under the play button on the thumbnail." />
         <SwitchRow label="Hide Play icon" checked={es.textVideo.hidePlayIcon} onChange={(v) => setES("textVideo", "hidePlayIcon", v)} />
         <SwitchRow label="Headline" checked={es.textVideo.headline} onChange={(v) => setES("textVideo", "headline", v)} />
-        <CountedInput label="Back Button label" value={es.textVideo.backButtonLabel} onChange={(v) => setES("textVideo", "backButtonLabel", v)} max={25} placeholder="Back to Offer" />
+        <CountedInput label="Back Button label" value={es.textVideo.backButtonLabel} onChange={(v) => setES("textVideo", "backButtonLabel", v)} max={25} placeholder="Back to Offer" help="Label of the button that returns from the video view to the offer." />
         <SwitchRow label="Autoplay" checked={es.textVideo.autoplay} onChange={(v) => setES("textVideo", "autoplay", v)} />
-        <ColorSwatchRow label="Background Color" value={es.textVideo.bg} onChange={(v) => setES("textVideo", "bg", v)} />
+        <ColorSwatchRow label="Background Color" value={es.textVideo.bg} onChange={(v) => setES("textVideo", "bg", v)} help="Background of the text & video section (preview only; live inherits the checkout theme)." />
         <Pad label="Top padding" value={es.textVideo.top} onChange={(v) => setES("textVideo", "top", v)} />
         <Pad label="Bottom padding" value={es.textVideo.bottom} onChange={(v) => setES("textVideo", "bottom", v)} />
       </SectionItem>
@@ -767,26 +854,35 @@ function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
 }
 
 export default function OfferEditor() {
-  const { offer, funnel, type, dbError, shop } = useLoaderData();
+  const { offer, funnel, type, dbError, storeName } = useLoaderData();
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
-  const [draft, setDraft] = useState(() => normalizeOffer(offer || {}));
+  const initial = () => normalizeOffer(offer || {}, type);
+  const [saved, setSaved] = useState(initial); // last-saved snapshot (for Discard)
+  const [draft, setDraft] = useState(initial);
   const [device, setDevice] = useState("desktop");
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const busy = fetcher.state !== "idle";
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
   const setES = (group, key, value) =>
     setDraft((d) => ({ ...d, editorSettings: { ...d.editorSettings, [group]: { ...d.editorSettings[group], [key]: value } } }));
 
   const save = () =>
     fetcher.submit({ intent: "update-offer", data: JSON.stringify(draft) }, { method: "post" });
+  const discard = () => setDraft(saved);
 
   useEffect(() => {
     if (!fetcher.data) return;
-    if (fetcher.data.ok) toast.success(fetcher.data.message || "Saved");
-    else if (fetcher.data.error) toast.error(fetcher.data.error);
+    if (fetcher.data.ok) {
+      toast.success(fetcher.data.message || "Saved");
+      setSaved(draft); // adopt the just-saved draft as the new baseline
+    } else if (fetcher.data.error) {
+      toast.error(fetcher.data.error);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetcher.data]);
 
   if (dbError) {
@@ -807,7 +903,6 @@ export default function OfferEditor() {
   const backHref = `/app/funnels/${type}/${funnel.id}`;
   const hasProduct = !!draft.productId;
   const isPP = type === "post-purchase";
-  const storeName = (shop || "").replace(/\.myshopify\.com$/, "");
 
   return (
     <div className="space-y-4">
@@ -824,10 +919,23 @@ export default function OfferEditor() {
             <p className="text-xs text-muted-foreground capitalize">{draft.type} offer · {funnel.name}</p>
           </div>
         </div>
-        <Button onClick={save} disabled={busy}>
-          <Save className="h-4 w-4 mr-2" />
-          {busy ? "Saving..." : "Save"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {dirty ? <span className="text-xs text-amber-600 mr-1">Unsaved changes</span> : null}
+          <Button variant="outline" onClick={discard} disabled={busy || !dirty}>Discard</Button>
+          <Button onClick={save} disabled={busy || !dirty}>
+            <Save className="h-4 w-4 mr-2" />
+            {busy ? "Saving..." : "Save"}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="More actions"><MoreVertical className="h-4 w-4" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onSelect={() => navigate(backHref)}>Back to funnel</DropdownMenuItem>
+              <DropdownMenuItem onSelect={discard} disabled={!dirty}>Discard changes</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* Split panel */}

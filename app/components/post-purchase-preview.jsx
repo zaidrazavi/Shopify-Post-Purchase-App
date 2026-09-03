@@ -16,9 +16,9 @@
 import { useEffect, useRef, useState } from "react";
 
 export const DEVICES = [
-  { id: "desktop", icon: "desktop", label: "Desktop", width: 820 },
-  { id: "tablet", icon: "tablet", label: "Tablet", width: 620 },
-  { id: "mobile", icon: "mobile", label: "Mobile", width: 380 },
+  { id: "desktop", icon: "desktop", label: "Desktop", width: 760 },
+  { id: "tablet", icon: "tablet", label: "Tablet", width: 560 },
+  { id: "mobile", icon: "mobile", label: "Mobile", width: 375 },
 ];
 
 function pricing(o) {
@@ -47,10 +47,12 @@ const IMG_WIDTH = { small: "30%", medium: "40%", large: "52%" };
 const BLUE = "#1773b0";
 const INK = "#1a1a1a";
 const SUBTLE = "#6b7177";
+const LINE = "#e6e6e6";
 
 export function PostPurchasePreview({ offer, device, storeName }) {
   const o = offer || {};
   const es = o.editorSettings && typeof o.editorSettings === "object" ? o.editorSettings : {};
+  const esDisplay = es.displayOffer || {};
   const esHeading = es.heading || {};
   const esCountdown = es.countdown || {};
   const esProduct = es.product || {};
@@ -74,9 +76,22 @@ export function PostPurchasePreview({ offer, device, storeName }) {
     return () => ro && ro.disconnect();
   }, [targetWidth]);
 
+  // Animated countdown — ticks every second, resets when the duration changes.
+  const durationSecs = Math.max(1, Number.parseInt(o.timerDuration, 10) || 10) * 60;
+  const [secondsLeft, setSecondsLeft] = useState(durationSecs);
+  useEffect(() => {
+    setSecondsLeft(durationSecs);
+  }, [durationSecs]);
+  useEffect(() => {
+    if (!o.timerEnabled) return undefined;
+    const id = setInterval(() => setSecondsLeft((s) => (s > 0 ? s - 1 : 0)), 1000);
+    return () => clearInterval(id);
+  }, [o.timerEnabled]);
+  const mm = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
+  const ss = String(secondsLeft % 60).padStart(2, "0");
+
   const p = pricing(o);
-  const mins = String(Math.max(1, Number.parseInt(o.timerDuration, 10) || 10)).padStart(2, "0");
-  const header = o.headline || `Add ${o.productTitle || "this product"} to your order`;
+  const header = o.headline || `Add ${o.productTitle || "a Product Title"} to your order`;
   const acceptText = o.buttonText || "Complete Purchase";
   const declineText = o.declineText || "Decline this offer";
   const sideBySide = o.buttonsPosition === "side-by-side";
@@ -91,6 +106,7 @@ export function PostPurchasePreview({ offer, device, storeName }) {
   const useIcon = esProduct.useIcon !== false;
   const imgWidth = narrow ? "100%" : IMG_WIDTH[o.imageSize] || "40%";
   const imgFit = o.imageFit === "cover" ? "cover" : "contain";
+  const allowSub = esDisplay.allowSubscription !== false;
 
   const badgeEl =
     o.badgeEnabled && badgePos !== "none" ? (
@@ -116,33 +132,93 @@ export function PostPurchasePreview({ offer, device, storeName }) {
     </div>
   );
   const declineBtn = (
-    <div style={{ color: BLUE, textAlign: "center", fontSize: 14, padding: "10px" }}>{declineText}</div>
+    <div style={{ border: `1px solid ${LINE}`, color: BLUE, textAlign: "center", fontSize: 14, padding: "11px", borderRadius: 6 }}>
+      {declineText}
+    </div>
+  );
+
+  const moneySummary = (
+    <div style={{ borderTop: `1px solid ${LINE}`, paddingTop: 10, marginBottom: 12 }}>
+      {!esProduct.hideSubtotalLine ? (
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+          <span style={{ color: SUBTLE }}>Subtotal</span><span>{money(p.final)}</span>
+        </div>
+      ) : null}
+      {esProduct.shipping === "charge" && !esProduct.hideShippingLine ? (
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+          <span style={{ color: SUBTLE }}>Shipping</span><span>Calculated at checkout</span>
+        </div>
+      ) : null}
+      {!esProduct.hideTotalLine ? (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <span style={{ fontWeight: 700, fontSize: 15 }}>Total</span>
+          <span style={{ fontWeight: 700, fontSize: 15 }}>
+            <span style={{ color: SUBTLE, fontSize: 11, fontWeight: 400, marginRight: 4 }}>USD</span>{money(p.final)}
+          </span>
+        </div>
+      ) : null}
+      <div style={{ fontSize: 11, color: SUBTLE, marginTop: 2 }}>Including N/A in taxes</div>
+    </div>
   );
 
   const Block = ({ b, i }) => {
     if (!b) return null;
-    if (b.type === "heading") return <div key={i} style={{ fontSize: 18, fontWeight: 700, color: INK }}>{b.text || ""}</div>;
-    if (b.type === "text") return <div key={i} style={{ fontSize: 14, color: SUBTLE, lineHeight: 1.5 }}>{b.text || ""}</div>;
-    if (b.type === "divider") return <div key={i} style={{ borderTop: "1px solid #e6e6e6", margin: "4px 0" }} />;
-    if (b.type === "image") return b.imageUrl ? <img key={i} src={b.imageUrl} alt="" style={{ width: "100%", borderRadius: 8 }} /> : null;
-    if (b.type === "video")
-      return b.thumbnailUrl ? (
-        <div key={i} style={{ position: "relative" }}>
-          <img src={b.thumbnailUrl} alt="" style={{ width: "100%", borderRadius: 8, display: "block" }} />
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ width: 48, height: 48, borderRadius: "50%", background: "rgba(0,0,0,0.55)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>▶</div>
+    const t = b.type;
+    if (t === "heading") return <div key={i} style={{ fontSize: 18, fontWeight: 700, color: INK }}>{b.text || "Heading"}</div>;
+    if (t === "text") return <div key={i} style={{ fontSize: 14, color: SUBTLE, lineHeight: 1.5 }}>{b.text || "Give a detailed description of a specific feature or benefit of your product."}</div>;
+    if (t === "divider") return <div key={i} style={{ borderTop: `1px solid ${LINE}`, margin: "4px 0" }} />;
+    if (t === "image") return b.imageUrl ? <img key={i} src={b.imageUrl} alt="" style={{ width: "100%", borderRadius: 8 }} /> : <div key={i} style={{ width: "100%", aspectRatio: "16/9", background: "#f0f0f0", borderRadius: 8 }} />;
+    if (t === "video" || t === "text_video")
+      return (
+        <div key={i} style={{ display: "flex", gap: 16, alignItems: "center", flexDirection: narrow ? "column" : "row" }}>
+          {t === "text_video" ? <div style={{ flex: 1, fontSize: 14, color: SUBTLE, lineHeight: 1.5 }}>{b.text || "Describe your product…"}</div> : null}
+          <div style={{ position: "relative", flex: 1, minWidth: 0, width: "100%" }}>
+            {b.thumbnailUrl ? <img src={b.thumbnailUrl} alt="" style={{ width: "100%", borderRadius: 8, display: "block" }} /> : <div style={{ width: "100%", aspectRatio: "16/9", background: "#eef0f2", borderRadius: 8 }} />}
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: 48, height: 48, borderRadius: "50%", background: "rgba(255,255,255,0.9)", color: INK, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>▶</div>
+            </div>
           </div>
         </div>
-      ) : null;
+      );
+    if (t === "text_image")
+      return (
+        <div key={i} style={{ display: "flex", gap: 16, alignItems: "center", flexDirection: narrow ? "column" : "row" }}>
+          <div style={{ flex: 1, fontSize: 14, color: SUBTLE, lineHeight: 1.5 }}>{b.text || "Describe your product…"}</div>
+          {b.imageUrl ? <img src={b.imageUrl} alt="" style={{ flex: 1, width: "100%", borderRadius: 8 }} /> : <div style={{ flex: 1, width: "100%", aspectRatio: "1", background: "#f0f0f0", borderRadius: 8 }} />}
+        </div>
+      );
+    if (t === "countdown")
+      return (
+        <div key={i} style={{ background: "#f4f4f5", textAlign: "center", padding: "10px", fontSize: 14, borderRadius: 6 }}>
+          Exclusive offer expires in: <span style={{ fontWeight: 700 }}>{mm}:{ss}</span>
+        </div>
+      );
+    if (t === "buybox")
+      return <div key={i}>{acceptBtn}</div>;
     return null;
   };
 
-  // Text & Video content section (headline + copy + optional video thumb).
-  const tvLayout = esTV.layout || "center"; // left | center | right (video side)
-  const showVideo = o.videoEnabled && o.videoThumbnailUrl;
+  // Trust badges row: real images if provided, else 4 gray placeholder circles.
+  const trustRow = o.trustBadgesEnabled ? (
+    <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
+      {trust.length
+        ? trust.map((src, i) => <img key={i} src={src} alt="" style={{ height: 34, objectFit: "contain" }} />)
+        : [0, 1, 2, 3].map((i) => (
+            <div key={i} style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${LINE}`, background: "#f3f4f6" }} />
+          ))}
+    </div>
+  ) : null;
+
+  // Text & Video content section.
+  const tvLayout = esTV.layout || "center";
+  const showVideo = o.videoEnabled;
   const videoThumb = showVideo ? (
-    <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
-      <img src={o.videoThumbnailUrl} alt="" style={{ width: "100%", borderRadius: 10, display: "block" }} />
+    <div style={{ position: "relative", flex: 1, minWidth: 0, width: "100%" }}>
+      {o.videoThumbnailUrl ? (
+        <img src={o.videoThumbnailUrl} alt="" style={{ width: "100%", borderRadius: 10, display: "block" }} />
+      ) : (
+        <div style={{ width: "100%", aspectRatio: "16/9", background: "#eef0f2", borderRadius: 10 }} />
+      )}
       {!esTV.hidePlayIcon ? (
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(255,255,255,0.9)", color: INK, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>▶</div>
@@ -180,34 +256,39 @@ export function PostPurchasePreview({ offer, device, storeName }) {
           <div style={{ padding: "16px 24px", borderBottom: "1px solid #eee" }}>
             <div style={{ fontSize: 18, fontWeight: 600 }}>{storeName || "Your store"}</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, color: SUBTLE, fontSize: 13 }}>
-              <span style={{ color: BLUE }}>✓</span> You&apos;ve paid for your order.
+              <span style={{
+                display: "inline-flex", width: 16, height: 16, borderRadius: "50%",
+                border: `1.5px solid ${BLUE}`, color: BLUE, alignItems: "center", justifyContent: "center", fontSize: 10,
+              }}>✓</span> You&apos;ve paid for your order.
             </div>
             <div style={{ color: BLUE, fontSize: 13, marginTop: 2 }}>View order confirmation ›</div>
           </div>
 
           {/* Heading */}
-          <div
-            style={{
-              textAlign: "center", fontSize: 17, fontWeight: 700,
-              background: esHeading.bg || "transparent",
-              paddingTop: padPx(esHeading.top ?? 40) + 10, paddingBottom: padPx(esHeading.bottom ?? 20) + 10,
-              paddingLeft: 24, paddingRight: 24,
-            }}
-          >
-            {header}
-          </div>
+          {o.headlineEnabled !== false ? (
+            <div
+              style={{
+                textAlign: "center", fontSize: 17, fontWeight: 700,
+                background: esHeading.bg || "transparent",
+                paddingTop: padPx(esHeading.top ?? 40) + 10, paddingBottom: padPx(esHeading.bottom ?? 20) + 10,
+                paddingLeft: 24, paddingRight: 24,
+              }}
+            >
+              {header}
+            </div>
+          ) : null}
 
-          {/* Countdown bar */}
+          {/* Countdown bar (animated) */}
           {o.timerEnabled ? (
             <div
               style={{
                 background: esCountdown.bg || "#f4f4f5", textAlign: "center", fontSize: 14,
                 borderBottom: "1px solid #eee",
                 paddingTop: padPx(esCountdown.top ?? 50) + 6, paddingBottom: padPx(esCountdown.bottom ?? 30) + 6,
-                marginLeft: esCountdown.fullWidth ? 0 : 0,
+                paddingLeft: esCountdown.fullWidth ? 0 : 24, paddingRight: esCountdown.fullWidth ? 0 : 24,
               }}
             >
-              Exclusive offer expires in: <span style={{ fontWeight: 700 }}>{mins}:00</span>
+              Exclusive offer expires in: <span style={{ fontWeight: 700 }}>{mm}:{ss}</span>
             </div>
           ) : null}
 
@@ -216,7 +297,7 @@ export function PostPurchasePreview({ offer, device, storeName }) {
             <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexDirection: narrow ? "column" : "row" }}>
               <div style={{ flex: narrow ? "1 1 auto" : `0 0 ${imgWidth}`, width: imgWidth }}>
                 {o.imageUrl ? (
-                  <img src={o.imageUrl} alt={o.productTitle || ""} style={{ width: "100%", objectFit: imgFit, borderRadius: 8, border: o.imageBorder ? "1px solid #eee" : "none", display: "block" }} />
+                  <img src={o.imageUrl} alt={o.productTitle || ""} style={{ width: "100%", objectFit: imgFit, borderRadius: 8, border: o.imageBorder ? `1px solid ${LINE}` : "none", display: "block" }} />
                 ) : (
                   <div style={{ width: "100%", aspectRatio: "1", background: "#f0f0f0", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "#aaa", fontSize: 13 }}>No image</div>
                 )}
@@ -235,7 +316,32 @@ export function PostPurchasePreview({ offer, device, storeName }) {
                   {badgePos === "next_to_price" && badgeEl ? badgeEl : null}
                 </div>
 
-                {o.descriptionEnabled && o.description ? <div style={{ fontSize: 13, color: SUBTLE, lineHeight: 1.45, marginBottom: 12 }}>{o.description}</div> : null}
+                {o.descriptionEnabled !== false ? (
+                  <div style={{ fontSize: 13, color: o.description ? SUBTLE : "#b6bbc0", lineHeight: 1.45, marginBottom: 12 }}>
+                    {o.description || "{{ product_description }}"}
+                  </div>
+                ) : null}
+
+                {/* Variant selector */}
+                <div style={{ border: `1px solid ${LINE}`, borderRadius: 6, padding: "6px 10px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: SUBTLE }}>Variant Title</div>
+                    <div style={{ fontSize: 13 }}>Product Variant</div>
+                  </div>
+                  <span style={{ color: SUBTLE }}>▾</span>
+                </div>
+
+                {/* Subscription radios */}
+                {allowSub ? (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, marginBottom: 6 }}>
+                      <span style={{ width: 14, height: 14, borderRadius: "50%", border: `4px solid ${BLUE}`, background: "#fff", display: "inline-block" }} /> One-time purchase
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: SUBTLE }}>
+                      <span style={{ width: 14, height: 14, borderRadius: "50%", border: `1px solid #c4c8cc`, display: "inline-block" }} /> Subscribe &amp; save 3%
+                    </div>
+                  </div>
+                ) : null}
 
                 {/* USP bullets */}
                 {o.uspEnabled && uspItems.length ? (
@@ -249,31 +355,13 @@ export function PostPurchasePreview({ offer, device, storeName }) {
                   </div>
                 ) : null}
 
-                {/* Money summary */}
-                {o.showMoneySummary ? (
-                  <div style={{ borderTop: "1px solid #eee", paddingTop: 10, marginBottom: 12 }}>
-                    {!esProduct.hideSubtotalLine ? (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                        <span style={{ color: SUBTLE }}>Subtotal</span><span>{money(p.final)}</span>
-                      </div>
-                    ) : null}
-                    {esProduct.shipping === "charge" && !esProduct.hideShippingLine ? (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                        <span style={{ color: SUBTLE }}>Shipping</span><span>Calculated at checkout</span>
-                      </div>
-                    ) : null}
-                    {!esProduct.hideTotalLine ? (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700 }}>
-                        <span>Total</span><span>USD {money(p.final)}</span>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                {/* Money summary (buy box) */}
+                {moneySummary}
 
                 {/* Buttons */}
                 <div style={{ display: sideBySide ? "flex" : "block", gap: 10 }}>
-                  <div style={{ flex: 1 }}>{acceptBtn}</div>
-                  <div style={{ flex: sideBySide ? "0 0 auto" : undefined }}>{declineBtn}</div>
+                  <div style={{ flex: 1, marginBottom: sideBySide ? 0 : 8 }}>{acceptBtn}</div>
+                  <div style={{ flex: sideBySide ? 1 : undefined }}>{declineBtn}</div>
                 </div>
 
                 {esProduct.paymentDisclaimer ? (
@@ -282,14 +370,7 @@ export function PostPurchasePreview({ offer, device, storeName }) {
                   </div>
                 ) : null}
 
-                {/* Trust badges (USP Image) — only when images set (matches live) */}
-                {o.trustBadgesEnabled && trust.length ? (
-                  <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
-                    {trust.map((src, i) => (
-                      <img key={i} src={src} alt="" style={{ height: 34, objectFit: "contain" }} />
-                    ))}
-                  </div>
-                ) : null}
+                {trustRow}
               </div>
             </div>
           </div>
@@ -305,21 +386,14 @@ export function PostPurchasePreview({ offer, device, storeName }) {
               }}
             >
               {(showVideo || esTV.headline !== false) ? (
-                <div
-                  style={{
-                    display: "flex", gap: 18, alignItems: "flex-start",
-                    flexDirection: narrow ? "column" : tvLayout === "left" ? "row-reverse" : "row",
-                  }}
-                >
-                  {tvLayout === "center" && !narrow ? (
-                    <div style={{ flex: 1, textAlign: "center" }}>{tvCopy}{showVideo ? <div style={{ marginTop: 14 }}>{videoThumb}</div> : null}</div>
-                  ) : (
-                    <>
-                      {tvCopy}
-                      {videoThumb}
-                    </>
-                  )}
-                </div>
+                tvLayout === "center" && !narrow ? (
+                  <div style={{ textAlign: "center" }}>{tvCopy}{showVideo ? <div style={{ marginTop: 14 }}>{videoThumb}</div> : null}</div>
+                ) : (
+                  <div style={{ display: "flex", gap: 18, alignItems: "center", flexDirection: narrow ? "column" : tvLayout === "left" ? "row-reverse" : "row" }}>
+                    {tvCopy}
+                    {videoThumb}
+                  </div>
+                )
               ) : null}
               {blocks.map((b, i) => <Block key={i} b={b} i={i} />)}
             </div>
