@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/accordion";
 import { ShopifyProductPicker } from "@/components/ShopifyProductPicker";
 import { OfferPreview, DEVICES } from "@/components/offer-preview";
+import { PostPurchasePreview } from "@/components/post-purchase-preview";
 import {
   ArrowLeft, Save, Package, Search, Monitor, Tablet, Smartphone,
   Heading1, TextCursorInput, Clock, ListChecks, DollarSign, MousePointerClick, Eye, Paintbrush,
@@ -411,14 +412,16 @@ export default function OfferEditor() {
             </div>
           </SectionItem>
 
-          {/* 2. Sub-headline */}
-          <SectionItem value="subheadline" icon={TextCursorInput} title="Sub-headline">
-            <SwitchRow label="Show subheadline" checked={draft.subheadlineEnabled} onChange={(v) => set("subheadlineEnabled", v)} />
-            <div>
-              <Label className="text-xs">Subheadline</Label>
-              <Input value={draft.subheadlineText} onChange={(e) => set("subheadlineText", e.target.value)} className="mt-1 h-9" />
-            </div>
-          </SectionItem>
+          {/* 2. Sub-headline (popup only) */}
+          {type !== "post-purchase" && (
+            <SectionItem value="subheadline" icon={TextCursorInput} title="Sub-headline">
+              <SwitchRow label="Show subheadline" checked={draft.subheadlineEnabled} onChange={(v) => set("subheadlineEnabled", v)} />
+              <div>
+                <Label className="text-xs">Subheadline</Label>
+                <Input value={draft.subheadlineText} onChange={(e) => set("subheadlineText", e.target.value)} className="mt-1 h-9" />
+              </div>
+            </SectionItem>
+          )}
 
           {/* 3. Timer Bar */}
           <SectionItem value="timer" icon={Clock} title="Timer Bar">
@@ -608,20 +611,23 @@ export default function OfferEditor() {
             </>
           )}
 
-          {/* 8. Display Offer */}
-          <SectionItem value="display" icon={Eye} title="Display Offer">
-            <SwitchRow label="Hide offer if the cart already contains the upsell product" checked={draft.hideIfInCart} onChange={(v) => set("hideIfInCart", v)} />
-            <SwitchRow label="Allow subscription option" checked={draft.allowSubscription} onChange={(v) => set("allowSubscription", v)} details="Stored for a future subscription purchase flow." />
-            <SwitchRow label="Hide offer if the cart has subscription products" checked={draft.hideIfCartHasSubscription} onChange={(v) => set("hideIfCartHasSubscription", v)} />
-            <div className="border-t pt-3">
-              <p className="text-sm font-semibold">Trigger</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Shown when the buyer clicks Checkout in the cart. (Product-page triggers are out of scope for now.)
-              </p>
-            </div>
-          </SectionItem>
+          {/* 8. Display Offer (popup only) */}
+          {type !== "post-purchase" && (
+            <SectionItem value="display" icon={Eye} title="Display Offer">
+              <SwitchRow label="Hide offer if the cart already contains the upsell product" checked={draft.hideIfInCart} onChange={(v) => set("hideIfInCart", v)} />
+              <SwitchRow label="Allow subscription option" checked={draft.allowSubscription} onChange={(v) => set("allowSubscription", v)} details="Stored for a future subscription purchase flow." />
+              <SwitchRow label="Hide offer if the cart has subscription products" checked={draft.hideIfCartHasSubscription} onChange={(v) => set("hideIfCartHasSubscription", v)} />
+              <div className="border-t pt-3">
+                <p className="text-sm font-semibold">Trigger</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Shown when the buyer clicks Checkout in the cart. (Product-page triggers are out of scope for now.)
+                </p>
+              </div>
+            </SectionItem>
+          )}
 
-          {/* 9. General */}
+          {/* 9. General (popup only) */}
+          {type !== "post-purchase" && (
           <SectionItem value="general" icon={Paintbrush} title="General">
             <SwitchRow label="Inherit store font" checked={draft.inheritStoreFont} onChange={(v) => set("inheritStoreFont", v)} details="Use the theme's font instead of the one below." />
             <div>
@@ -666,6 +672,7 @@ export default function OfferEditor() {
               <Input type="number" min="0" max="40" value={draft.cornerRadius} onChange={(e) => set("cornerRadius", e.target.value)} className="mt-1 h-9" />
             </div>
           </SectionItem>
+          )}
         </Accordion>
 
         {/* RIGHT: sticky live preview + device toggle */}
@@ -690,7 +697,11 @@ export default function OfferEditor() {
               })}
             </div>
           </div>
-          <OfferPreview offer={draft} device={device} />
+          {type === "post-purchase" ? (
+            <PostPurchasePreview offer={draft} device={device} />
+          ) : (
+            <OfferPreview offer={draft} device={device} />
+          )}
         </div>
       </div>
 
