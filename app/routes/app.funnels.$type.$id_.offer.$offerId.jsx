@@ -32,6 +32,7 @@ import { OfferPreview, DEVICES } from "@/components/offer-preview";
 import {
   ArrowLeft, Save, Package, Search, Monitor, Tablet, Smartphone,
   Heading1, TextCursorInput, Clock, ListChecks, DollarSign, MousePointerClick, Eye, Paintbrush,
+  Award, Sparkles, ShieldCheck, Video, LayoutList, Receipt, Plus, Trash2, ArrowUp, ArrowDown,
 } from "lucide-react";
 
 const VALID_TYPES = ["pre-purchase", "post-purchase", "thank-you"];
@@ -93,6 +94,19 @@ function normalizeOffer(o) {
     themeVariant: o.themeVariant ?? "classic",
     layout: o.layout ?? "media-left",
     cornerRadius: o.cornerRadius ?? 14,
+    // --- OCU post-purchase fields ---
+    badgeEnabled: o.badgeEnabled ?? false,
+    badgeText: o.badgeText ?? "Bestseller",
+    buttonsPosition: o.buttonsPosition ?? "stacked",
+    uspEnabled: o.uspEnabled ?? false,
+    uspItems: Array.isArray(o.uspItems) ? o.uspItems : [],
+    trustBadgesEnabled: o.trustBadgesEnabled ?? false,
+    trustBadgeImages: Array.isArray(o.trustBadgeImages) ? o.trustBadgeImages : [],
+    showMoneySummary: o.showMoneySummary ?? false,
+    videoEnabled: o.videoEnabled ?? false,
+    videoThumbnailUrl: o.videoThumbnailUrl ?? "",
+    videoLinkUrl: o.videoLinkUrl ?? "",
+    contentBlocks: Array.isArray(o.contentBlocks) ? o.contentBlocks : [],
   };
 }
 
@@ -127,6 +141,8 @@ const STR_FIELDS = [
   "declineButtonHoverColor", "closeButtonBehavior", "fontFamily", "selectorsColor",
   "elementsColor", "themeVariant", "imageFit", "imageSize", "badgeText", "badgeColor",
   "variantBHeadline", "variantBDescription", "variantBButtonText",
+  // OCU post-purchase
+  "buttonsPosition", "videoThumbnailUrl", "videoLinkUrl",
 ];
 const NUM_FIELDS = ["price", "compareAtPrice", "discountValue"];
 const INT_FIELDS = ["timerDuration", "cornerRadius", "predefinedQuantity", "trafficSplit"];
@@ -135,7 +151,11 @@ const BOOL_FIELDS = [
   "imageBorder", "autoselectVariant", "hideQuantitySelector", "showCompareAt",
   "showSavings", "hideIfInCart", "allowSubscription", "hideIfCartHasSubscription",
   "inheritStoreFont", "badgeEnabled",
+  // OCU post-purchase
+  "uspEnabled", "trustBadgesEnabled", "showMoneySummary", "videoEnabled",
 ];
+// Prisma Json columns — pass arrays through as-is, else null.
+const JSON_FIELDS = ["uspItems", "trustBadgeImages", "contentBlocks"];
 
 function coerceOffer(raw) {
   const data = {};
@@ -157,6 +177,7 @@ function coerceOffer(raw) {
     }
   }
   for (const k of BOOL_FIELDS) if (k in raw) data[k] = Boolean(raw[k]);
+  for (const k of JSON_FIELDS) if (k in raw) data[k] = Array.isArray(raw[k]) ? raw[k] : null;
   return data;
 }
 
@@ -217,6 +238,105 @@ function SectionItem({ value, icon: Icon, title, children }) {
         <div className="space-y-3">{children}</div>
       </AccordionContent>
     </AccordionItem>
+  );
+}
+
+/* ─── OCU list editors (post-purchase) ─── */
+function StringListEditor({ items, onChange, placeholder, addLabel }) {
+  const list = Array.isArray(items) ? items : [];
+  const setAt = (i, v) => onChange(list.map((x, j) => (j === i ? v : x)));
+  const remove = (i) => onChange(list.filter((_, j) => j !== i));
+  return (
+    <div className="space-y-2">
+      {list.map((v, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Input value={v} onChange={(e) => setAt(i, e.target.value)} placeholder={placeholder} className="h-9 text-xs" />
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => remove(i)}><Trash2 className="h-3.5 w-3.5" /></Button>
+        </div>
+      ))}
+      <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onChange([...list, ""])}>
+        <Plus className="h-3.5 w-3.5 mr-1" />{addLabel}
+      </Button>
+    </div>
+  );
+}
+
+function UspEditor({ items, onChange }) {
+  const list = Array.isArray(items) ? items : [];
+  const setAt = (i, patch) => onChange(list.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const remove = (i) => onChange(list.filter((_, j) => j !== i));
+  return (
+    <div className="space-y-2">
+      {list.map((it, i) => (
+        <div key={i} className="rounded-md border p-2 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Input value={it.text ?? ""} onChange={(e) => setAt(i, { text: e.target.value })} placeholder="Benefit text" className="h-9 text-xs" />
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => remove(i)}><Trash2 className="h-3.5 w-3.5" /></Button>
+          </div>
+          <Input value={it.iconUrl ?? ""} onChange={(e) => setAt(i, { iconUrl: e.target.value || undefined })} placeholder="Icon image URL (optional)" className="h-8 text-xs" />
+        </div>
+      ))}
+      <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => onChange([...list, { text: "" }])}>
+        <Plus className="h-3.5 w-3.5 mr-1" />Add bullet
+      </Button>
+    </div>
+  );
+}
+
+const BLOCK_TYPES = [
+  { value: "heading", label: "Heading" },
+  { value: "text", label: "Text" },
+  { value: "divider", label: "Divider" },
+  { value: "image", label: "Image" },
+  { value: "video", label: "Video" },
+];
+
+function ContentBlocksEditor({ blocks, onChange }) {
+  const list = Array.isArray(blocks) ? blocks : [];
+  const commit = (next) => onChange(next.map((b, i) => ({ ...b, position: i })));
+  const setAt = (i, patch) => commit(list.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const remove = (i) => commit(list.filter((_, j) => j !== i));
+  const move = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= list.length) return;
+    const next = [...list];
+    [next[i], next[j]] = [next[j], next[i]];
+    commit(next);
+  };
+  return (
+    <div className="space-y-2">
+      {list.map((b, i) => (
+        <div key={i} className="rounded-md border p-2 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium capitalize">{b.type}</span>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => move(i, -1)} disabled={i === 0}><ArrowUp className="h-3.5 w-3.5" /></Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => move(i, 1)} disabled={i === list.length - 1}><ArrowDown className="h-3.5 w-3.5" /></Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(i)}><Trash2 className="h-3.5 w-3.5" /></Button>
+            </div>
+          </div>
+          {(b.type === "heading" || b.type === "text") && (
+            <Input value={b.text ?? ""} onChange={(e) => setAt(i, { text: e.target.value })} placeholder={b.type === "heading" ? "Heading text" : "Paragraph text"} className="h-8 text-xs" />
+          )}
+          {b.type === "image" && (
+            <Input value={b.imageUrl ?? ""} onChange={(e) => setAt(i, { imageUrl: e.target.value })} placeholder="Image URL" className="h-8 text-xs" />
+          )}
+          {b.type === "video" && (
+            <>
+              <Input value={b.thumbnailUrl ?? ""} onChange={(e) => setAt(i, { thumbnailUrl: e.target.value })} placeholder="Thumbnail image URL" className="h-8 text-xs" />
+              <Input value={b.linkUrl ?? ""} onChange={(e) => setAt(i, { linkUrl: e.target.value })} placeholder="Video link (opens external)" className="h-8 text-xs" />
+            </>
+          )}
+        </div>
+      ))}
+      <div className="flex flex-wrap gap-1.5">
+        {BLOCK_TYPES.map((t) => (
+          <Button key={t.value} variant="outline" size="sm" className="h-8 text-xs" onClick={() => commit([...list, { type: t.value, position: list.length }])}>
+            <Plus className="h-3 w-3 mr-1" />{t.label}
+          </Button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -429,6 +549,64 @@ export default function OfferEditor() {
               </Select>
             </div>
           </SectionItem>
+
+          {/* ── Post-purchase (OCU) sections — only for post-purchase offers ── */}
+          {type === "post-purchase" && (
+            <>
+              <SectionItem value="pp-badge" icon={Award} title="Badge">
+                <SwitchRow label="Show badge" checked={draft.badgeEnabled} onChange={(v) => set("badgeEnabled", v)} />
+                <div>
+                  <Label className="text-xs">Badge text</Label>
+                  <Input value={draft.badgeText} onChange={(e) => set("badgeText", e.target.value)} className="mt-1 h-9" />
+                  <p className="text-xs text-muted-foreground mt-1">Renders as bold text (post-purchase color is theme-controlled).</p>
+                </div>
+              </SectionItem>
+
+              <SectionItem value="pp-buttons" icon={MousePointerClick} title="Buttons layout">
+                <div>
+                  <Label className="text-xs">Buttons position</Label>
+                  <Select value={draft.buttonsPosition} onValueChange={(v) => set("buttonsPosition", v)}>
+                    <SelectTrigger className="mt-1 h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="stacked">Accept above decline (stacked)</SelectItem>
+                      <SelectItem value="side-by-side">Accept beside decline</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </SectionItem>
+
+              <SectionItem value="pp-money" icon={Receipt} title="Money summary">
+                <SwitchRow label="Show subtotal / total lines" checked={draft.showMoneySummary} onChange={(v) => set("showMoneySummary", v)} details="Shows the calculated subtotal and total on the offer." />
+              </SectionItem>
+
+              <SectionItem value="pp-usp" icon={Sparkles} title="USP / benefit bullets">
+                <SwitchRow label="Show USP bullets" checked={draft.uspEnabled} onChange={(v) => set("uspEnabled", v)} />
+                <UspEditor items={draft.uspItems} onChange={(v) => set("uspItems", v)} />
+              </SectionItem>
+
+              <SectionItem value="pp-trust" icon={ShieldCheck} title="Trust badges">
+                <SwitchRow label="Show trust badges" checked={draft.trustBadgesEnabled} onChange={(v) => set("trustBadgesEnabled", v)} />
+                <StringListEditor items={draft.trustBadgeImages} onChange={(v) => set("trustBadgeImages", v)} placeholder="Badge image URL" addLabel="Add image" />
+              </SectionItem>
+
+              <SectionItem value="pp-video" icon={Video} title="Video (thumbnail)">
+                <SwitchRow label="Show video block" checked={draft.videoEnabled} onChange={(v) => set("videoEnabled", v)} details="A thumbnail image linking to the video (no inline player in post-purchase)." />
+                <div>
+                  <Label className="text-xs">Thumbnail image URL</Label>
+                  <Input value={draft.videoThumbnailUrl} onChange={(e) => set("videoThumbnailUrl", e.target.value)} className="mt-1 h-9 text-xs" />
+                </div>
+                <div>
+                  <Label className="text-xs">Video link URL</Label>
+                  <Input value={draft.videoLinkUrl} onChange={(e) => set("videoLinkUrl", e.target.value)} className="mt-1 h-9 text-xs" />
+                </div>
+              </SectionItem>
+
+              <SectionItem value="pp-blocks" icon={LayoutList} title="Content blocks">
+                <p className="text-xs text-muted-foreground">Ordered blocks shown below the offer (heading, text, divider, image, video thumbnail).</p>
+                <ContentBlocksEditor blocks={draft.contentBlocks} onChange={(v) => set("contentBlocks", v)} />
+              </SectionItem>
+            </>
+          )}
 
           {/* 8. Display Offer */}
           <SectionItem value="display" icon={Eye} title="Display Offer">

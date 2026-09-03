@@ -294,6 +294,22 @@ model Offer {
   elementsColor             String?  // dividers/borders accent, hex
   themeVariant              String?  // "classic" | "bold"; old default "classic"
 
+  // --- OCU-style post-purchase fields (Phase 6-1). All nullable/additive;
+  // null = feature off / use default. Reuses existing columns where present:
+  // badge←badgeEnabled/badgeText, buttons←buttonText/declineText, headline,
+  // countdown←timerEnabled/timerDuration, discount/compareAtPrice/showCompareAt.
+  // Subscription / variant-selector / quantity-stepper intentionally deferred.
+  buttonsPosition    String?  // "stacked" | "side-by-side"
+  uspEnabled         Boolean? // show USP / feature bullets
+  uspItems           Json?    // array of { text, iconUrl? }
+  trustBadgesEnabled Boolean? // show trust-badge images row
+  trustBadgeImages   Json?    // array of image URLs
+  showMoneySummary   Boolean? // show subtotal/total lines
+  videoEnabled       Boolean? // show video-as-thumbnail block
+  videoThumbnailUrl  String?  // thumbnail image for the video block
+  videoLinkUrl       String?  // external video URL (opens out; no inline player)
+  contentBlocks      Json?    // ordered blocks: [{ type, position, ...fields }]
+
   impressions Int     @default(0)
   conversions Int     @default(0)
   revenue     Decimal @default(0) @db.Decimal(10, 2)

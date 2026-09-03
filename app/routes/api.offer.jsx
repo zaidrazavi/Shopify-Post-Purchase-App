@@ -8,6 +8,7 @@ import {
 import {
   hasNewFunnelOfType,
   offerConfigShapeFromFunnel,
+  postPurchaseExtras,
   resolvePostPurchaseOffer,
 } from "../models/funnel-resolver.server";
 import { recordEventDeduped } from "../models/event.server";
@@ -47,8 +48,10 @@ export const action = async ({ request }) => {
   if (await hasNewFunnelOfType(shop, "post-purchase")) {
     newModel = true;
     resolved = await resolvePostPurchaseOffer(shop);
+    // Base payload (core keys) is byte-identical to before; postPurchaseExtras
+    // spreads ONLY new optional OCU keys on top and can never throw.
     payload = resolved
-      ? buildOfferPayload(offerConfigShapeFromFunnel(resolved))
+      ? { ...buildOfferPayload(offerConfigShapeFromFunnel(resolved)), ...postPurchaseExtras(resolved) }
       : { enabled: false };
   } else {
     const config = await getOfferConfig(shop);

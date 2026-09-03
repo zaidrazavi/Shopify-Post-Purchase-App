@@ -1,11 +1,18 @@
 /**
  * Extend Shopify Checkout with a custom Post Purchase user experience.
- * This template provides two extension points:
  *
  *  1. ShouldRender - Called first, during the checkout process, when the
  *     payment page loads.
  *  2. Render - If requested by `ShouldRender`, will be rendered after checkout
  *     completes
+ *
+ * RENDER NOTE: The purchase flow (fetch /api/offer, ShouldRender gate,
+ * /api/sign-changeset signing, applyChangeset, accept/decline, downsell) is
+ * UNCHANGED. Only the visual tree changed. When the offer carries no OCU
+ * presentational keys (badge/usp/trustBadges/showMoneySummary/video/
+ * contentBlocks/buttonsPosition) — e.g. an existing offer — we return the exact
+ * previous layout, so live behavior is identical until those fields are set.
+ * Colors/fonts are Shopify-checkout-theme-locked (remote-ui limitation).
  */
 import React, { useEffect, useState } from "react";
 
@@ -14,32 +21,23 @@ import {
   render,
   Banner,
   BlockStack,
+  Bookend,
   Button,
+  ButtonGroup,
+  CalloutBanner,
+  Heading,
   Image,
   InlineStack,
   Layout,
+  Separator,
   Text,
   TextBlock,
+  Tiles,
   View,
 } from "@shopify/post-purchase-ui-extensions-react";
 
-/**
- * URL of this app's backend. The Accept flow POSTs here to have the changeset
- * signed with the app's API secret (which must never live in the extension
- * bundle).
- *
- * This is the production app URL (Render). It must match `application_url` in
- * shopify.app.toml. When developing locally with `shopify app dev`, temporarily
- * swap this for the printed Cloudflare tunnel URL (found in the dev server
- * output or .shopify/dev-bundle/manifest.json under `app_home.app_url`).
- */
 const APP_URL = "https://shopify-post-purchase-app.onrender.com";
 
-/**
- * Fetches the merchant's offer configuration from the app backend. The response
- * shape is defined by `buildOfferPayload` in app/models/offer.server.js and
- * includes the authoritative `changes` array for the changeset.
- */
 async function fetchOffer(inputData) {
   const response = await fetch(`${APP_URL}/api/offer`, {
     method: "POST",
@@ -60,12 +58,6 @@ async function fetchOffer(inputData) {
   return response.json();
 }
 
-/**
- * Entry point for the `ShouldRender` Extension Point.
- *
- * Reads the merchant's saved configuration and only renders the post-purchase
- * step when the offer is enabled and points at a real product.
- */
 extend("Checkout::PostPurchase::ShouldRender", async ({ inputData, storage }) => {
   try {
     const offer = await fetchOffer(inputData);
@@ -74,30 +66,15 @@ extend("Checkout::PostPurchase::ShouldRender", async ({ inputData, storage }) =>
       return { render: false };
     }
 
-    // Saved state is provided to `Render` via `storage.initialData`.
     await storage.update({ offer });
     return { render: true };
   } catch (e) {
-    // Fail closed: if we can't load the config, don't interrupt checkout.
     // eslint-disable-next-line no-console
     console.error("post-purchase ShouldRender failed", e);
     return { render: false };
   }
 });
 
-/**
- * Entry point for the `Render` Extension Point.
- *
- * Returns markup composed of remote UI components. The Render extension can
- * optionally make use of data stored during `ShouldRender` extension point to
- * expedite time-to-first-meaningful-paint.
- */
-// The SDK's `render` INVOKES this second argument as a function (`render(input)`)
-// and uses the result as the element to mount. Passing `App` directly would call
-// `App(input)` as a plain function — running its hooks outside React's render
-// phase, which throws "invalid hook call" (#321) and makes Shopify skip the page.
-// Return an <App /> ELEMENT (with the extension input spread as props) so App is
-// mounted by the reconciler and its hooks run correctly.
 render("Checkout::PostPurchase::Render", (input) => <App {...input} />);
 
 // Discount percentage for the "SAVE X%" badge, derived from the compare-at and
@@ -111,19 +88,44 @@ function savePercent(offer) {
   return Math.round((1 - price / compareAt) * 100);
 }
 
+const money = (bag) => bag?.presentmentMoney?.amount ?? "";
+
+// One content block from payload.contentBlocks → a remote-ui element.
+function renderBlock(b, i) {
+  if (!b || typeof b !== "object") return null;
+  switch (b.type) {
+    case "heading":
+      return <Heading key={i}>{b.text || ""}</Heading>;
+    case "text":
+      return <TextBlock key={i}>{b.text || ""}</TextBlock>;
+    case "divider":
+      return <Separator key={i} />;
+    case "image":
+      return b.imageUrl ? (
+        <Image key={i} source={b.imageUrl} description="" aspectRatio={1.6} fit="cover" />
+      ) : null;
+    case "video":
+      return b.thumbnailUrl ? (
+        <BlockStack key={i} alignment="center" spacing="tight">
+          <Image source={b.thumbnailUrl} description="" aspectRatio={1.6} fit="cover" />
+          {b.linkUrl ? (
+            <Button plain to={b.linkUrl}>
+              Watch video
+            </Button>
+          ) : null}
+        </BlockStack>
+      ) : null;
+    default:
+      return null;
+  }
+}
+
 // Top-level React component
 export function App({ storage, inputData, calculateChangeset, applyChangeset, done }) {
-  // `ShouldRender` stored the full payload: main offer fields at the top level,
-  // plus an optional nested `downsell`. Both are pre-fetched so switching steps
-  // needs no network call.
   const payload = storage.initialData?.offer;
-  // Defensive: if the offer didn't survive from ShouldRender for any reason,
-  // fall back to an empty object so the hooks below can't throw and crash the
-  // render (a crash makes Shopify silently skip the post-purchase page).
   const mainOffer = payload ?? {};
   const downsellOffer = payload?.downsell ?? null;
 
-  // "main" = the upsell shown first; "downsell" = the fallback after a decline.
   const [step, setStep] = useState("main");
   const offer = step === "downsell" && downsellOffer ? downsellOffer : mainOffer;
 
@@ -132,17 +134,12 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
   const [error, setError] = useState(null);
   const [calculatedPurchase, setCalculatedPurchase] = useState(null);
 
-  // Countdown timer: UI-only urgency on the main step. Starts from the
-  // configured minutes and resets on page load — it never expires the offer or
-  // touches inventory.
   const [secondsLeft, setSecondsLeft] = useState(
     mainOffer.countdownEnabled
       ? Math.max(0, Math.round((mainOffer.countdownMinutes ?? 10) * 60))
       : 0,
   );
 
-  // If the offer somehow didn't come through, don't render a broken empty page —
-  // gracefully end the post-purchase step so the buyer proceeds to Thank-You.
   useEffect(() => {
     if (!payload) done();
   }, [payload, done]);
@@ -155,8 +152,6 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     return () => clearInterval(id);
   }, [mainOffer.countdownEnabled, step]);
 
-  // Price the currently shown offer against the completed order. Re-runs when
-  // the step changes so the downsell gets its own accurate total.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -192,9 +187,6 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     };
   }, [calculateChangeset, offer.changes]);
 
-  // The final (discounted) price the buyer pays for this item. We use the
-  // config-derived price so it stays consistent with the savings math; the
-  // calculated changeset is still what actually gets charged on accept.
   const finalPrice = offer.price;
   const displayCurrency =
     calculatedPurchase?.totalOutstandingSet?.presentmentMoney?.currencyCode ?? "";
@@ -211,10 +203,6 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     setError(null);
 
     try {
-      // The changeset must be signed by our backend with the app's API secret
-      // before it can be applied. `inputData.token` proves this request came
-      // from a genuine post-purchase page; `offer` tells the backend which step
-      // (main or downsell) to sign so it rebuilds the authoritative changes.
       const response = await fetch(`${APP_URL}/api/sign-changeset`, {
         method: "POST",
         headers: {
@@ -234,8 +222,6 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
 
       const { token } = await response.json();
 
-      // Apply the signed changeset. Shopify charges the customer's existing
-      // payment method — no card re-entry required.
       const result = await applyChangeset(token);
       if (result?.errors?.length) {
         throw new Error(result.errors.map((err) => err.message).join(", "));
@@ -251,8 +237,6 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
   }
 
   function declineOffer() {
-    // Declining the main offer moves to the downsell (if configured); declining
-    // the downsell (or the main offer when there's no downsell) ends the flow.
     if (step === "main" && downsellOffer) {
       setProcessing(false);
       setStep("downsell");
@@ -261,27 +245,134 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     done();
   }
 
+  // ── Shared presentational nodes (identical output in both layouts) ──
+  const priceNode = loading ? (
+    <Text subdued>Calculating price…</Text>
+  ) : hasSavings ? (
+    <BlockStack spacing="tight">
+      <InlineStack spacing="tight">
+        <Text size="large" role="deletion" subdued>
+          {offer.compareAtPrice} {displayCurrency}
+        </Text>
+        <Text size="large" emphasized>
+          {finalPrice} {displayCurrency}
+        </Text>
+      </InlineStack>
+      {savePct != null ? (
+        <Text appearance="success" emphasized>
+          SAVE {savePct}%
+        </Text>
+      ) : null}
+    </BlockStack>
+  ) : (
+    <Text size="large" emphasized>
+      {finalPrice} {displayCurrency}
+    </Text>
+  );
+
+  const acceptBtn = (
+    <Button submit onPress={acceptOffer} loading={processing} disabled={loading || processing}>
+      {offer.acceptButtonText}
+    </Button>
+  );
+  const declineBtn = (
+    <Button plain onPress={declineOffer} disabled={processing}>
+      {offer.declineButtonText}
+    </Button>
+  );
+
+  // Enhanced OCU layout only when the CURRENT offer carries new OCU keys.
+  // Extras are emitted for the MAIN offer only, so the downsell always uses the
+  // original layout — and an offer with none set renders exactly as before.
+  const rich = Boolean(
+    offer.badge ||
+      offer.usp ||
+      offer.trustBadges ||
+      offer.showMoneySummary != null ||
+      offer.video ||
+      (Array.isArray(offer.contentBlocks) && offer.contentBlocks.length) ||
+      offer.buttonsPosition,
+  );
+
+  // ── Fallback: original layout, byte-for-byte as before ──
+  if (!rich) {
+    return (
+      <BlockStack spacing="loose">
+        {showCountdown ? (
+          <Banner status="success">
+            <Text emphasized>
+              {minutes}:{seconds} — It&apos;s not too late to add this to your order.
+            </Text>
+          </Banner>
+        ) : null}
+
+        <BlockStack spacing="tight" alignment="center">
+          <Text size="large" emphasized>
+            {offer.headline}
+          </Text>
+          {offer.description ? <Text subdued>{offer.description}</Text> : null}
+        </BlockStack>
+
+        <Layout
+          maxInlineSize={0.95}
+          media={[
+            { viewportSize: "small", sizes: [1, 30, 1] },
+            { viewportSize: "medium", sizes: [300, 30, 0.5] },
+            { viewportSize: "large", sizes: [400, 30, 0.33] },
+          ]}
+        >
+          <View>
+            {offer.image ? (
+              <Image source={offer.image} description={offer.title} aspectRatio={1} fit="cover" bordered />
+            ) : null}
+          </View>
+          <View />
+          <BlockStack spacing="base">
+            <Text emphasized>{offer.title}</Text>
+            {priceNode}
+            {error ? <TextBlock appearance="critical">{error}</TextBlock> : null}
+            {acceptBtn}
+            {declineBtn}
+          </BlockStack>
+        </Layout>
+      </BlockStack>
+    );
+  }
+
+  // ── Enhanced OCU-style layout (structure only; colors/fonts theme-locked) ──
+  const sortedBlocks = Array.isArray(offer.contentBlocks)
+    ? [...offer.contentBlocks].sort((a, b) => (a?.position ?? 0) - (b?.position ?? 0))
+    : [];
+
+  const buttonsNode =
+    offer.buttonsPosition === "side-by-side" ? (
+      <ButtonGroup>
+        {acceptBtn}
+        {declineBtn}
+      </ButtonGroup>
+    ) : (
+      <BlockStack spacing="tight">
+        {acceptBtn}
+        {declineBtn}
+      </BlockStack>
+    );
+
   return (
     <BlockStack spacing="loose">
-      {/* Green urgency banner with countdown (RevLift "special discount" style) */}
       {showCountdown ? (
-        <Banner status="success">
+        <CalloutBanner border="block" background="secondary" spacing="tight" alignment="center">
           <Text emphasized>
-            {minutes}:{seconds} — It&apos;s not too late to add this to your
-            order.
+            Exclusive offer expires in: {minutes}:{seconds}
           </Text>
-        </Banner>
+        </CalloutBanner>
       ) : null}
 
-      {/* Headline + sub-headline (centered, above the split) */}
-      <BlockStack spacing="tight" alignment="center">
-        <Text size="large" emphasized>
-          {offer.headline}
-        </Text>
-        {offer.description ? <Text subdued>{offer.description}</Text> : null}
-      </BlockStack>
+      {offer.headline ? (
+        <BlockStack spacing="tight" alignment="center">
+          <Heading>{offer.headline}</Heading>
+        </BlockStack>
+      ) : null}
 
-      {/* Horizontal split: product image (left) + details (right) — RevLift popup */}
       <Layout
         maxInlineSize={0.95}
         media={[
@@ -292,58 +383,65 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
       >
         <View>
           {offer.image ? (
-            <Image
-              source={offer.image}
-              description={offer.title}
-              aspectRatio={1}
-              fit="cover"
-              bordered
-            />
+            <Image source={offer.image} description={offer.title} aspectRatio={1} fit="cover" bordered />
           ) : null}
         </View>
         <View />
         <BlockStack spacing="base">
-          <Text emphasized>{offer.title}</Text>
+          {offer.badge?.enabled ? <Text emphasized>{offer.badge.text || ""}</Text> : null}
 
-          {loading ? (
-            <Text subdued>Calculating price…</Text>
-          ) : hasSavings ? (
-            <BlockStack spacing="tight">
-              <InlineStack spacing="tight">
-                <Text size="large" role="deletion" subdued>
-                  {offer.compareAtPrice} {displayCurrency}
-                </Text>
-                <Text size="large" emphasized>
-                  {finalPrice} {displayCurrency}
-                </Text>
-              </InlineStack>
-              {savePct != null ? (
-                <Text appearance="success" emphasized>
-                  SAVE {savePct}%
-                </Text>
-              ) : null}
+          <Heading level={3}>{offer.title}</Heading>
+          {offer.description ? <TextBlock subdued>{offer.description}</TextBlock> : null}
+
+          {priceNode}
+
+          {offer.usp?.enabled && Array.isArray(offer.usp.items) && offer.usp.items.length ? (
+            <BlockStack spacing="xtight">
+              {offer.usp.items.map((it, i) => (
+                <Text key={i}>• {it?.text || ""}</Text>
+              ))}
             </BlockStack>
-          ) : (
-            <Text size="large" emphasized>
-              {finalPrice} {displayCurrency}
-            </Text>
-          )}
+          ) : null}
 
           {error ? <TextBlock appearance="critical">{error}</TextBlock> : null}
 
-          <Button
-            submit
-            onPress={acceptOffer}
-            loading={processing}
-            disabled={loading || processing}
-          >
-            {offer.acceptButtonText}
-          </Button>
-          <Button plain onPress={declineOffer} disabled={processing}>
-            {offer.declineButtonText}
-          </Button>
+          {offer.showMoneySummary && !loading && calculatedPurchase ? (
+            <BlockStack spacing="tight">
+              <Separator />
+              <Bookend trailing>
+                <Text subdued>Subtotal</Text>
+                <Text>
+                  {money(calculatedPurchase.subtotalPriceSet)} {displayCurrency}
+                </Text>
+              </Bookend>
+              <Bookend trailing>
+                <Text emphasized>Total</Text>
+                <Text emphasized>
+                  {money(calculatedPurchase.totalPriceSet)} {displayCurrency}
+                </Text>
+              </Bookend>
+            </BlockStack>
+          ) : null}
+
+          {buttonsNode}
         </BlockStack>
       </Layout>
+
+      {offer.trustBadges?.enabled &&
+      Array.isArray(offer.trustBadges.images) &&
+      offer.trustBadges.images.length ? (
+        <Tiles maxPerLine={4} spacing="tight" alignment="center">
+          {offer.trustBadges.images.map((src, i) => (
+            <Image key={i} source={src} description="" aspectRatio={1} fit="contain" />
+          ))}
+        </Tiles>
+      ) : null}
+
+      {offer.video?.enabled && offer.video.thumbnailUrl
+        ? renderBlock({ type: "video", thumbnailUrl: offer.video.thumbnailUrl, linkUrl: offer.video.linkUrl }, "video")
+        : null}
+
+      {sortedBlocks.length ? <BlockStack spacing="base">{sortedBlocks.map(renderBlock)}</BlockStack> : null}
     </BlockStack>
   );
 }

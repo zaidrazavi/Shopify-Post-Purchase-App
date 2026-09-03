@@ -349,3 +349,55 @@ export async function resolveThankYouOffers(shop) {
 
   return { funnel, products, settings };
 }
+
+/**
+ * OCU-style presentational extras for the post-purchase offer page. Returns ONLY
+ * NEW keys to spread on top of the existing /api/offer payload — it never
+ * touches the core keys the live extension + changeset depend on (enabled,
+ * variantId, changes, price, title, image, headline, description, buttons,
+ * countdown, downsell, style). Reads the MAIN offer's new columns.
+ *
+ * BULLETPROOF: wrapped in try/catch and returns {} on ANY error, so the core
+ * payload always survives — clampaws's live offer can never blank because of
+ * these additions. All fields are optional; a null/missing field is omitted.
+ * (Subscription / variant-selector / quantity-stepper are intentionally not
+ * emitted — deferred per Phase 0.)
+ */
+export function postPurchaseExtras(resolved) {
+  try {
+    const o = resolved?.main;
+    if (!o) return {};
+    const extras = {};
+
+    // Badge (reuse existing columns; the core payload doesn't include it).
+    if (o.badgeEnabled) extras.badge = { enabled: true, text: o.badgeText ?? null };
+
+    if (o.buttonsPosition) extras.buttonsPosition = o.buttonsPosition; // "stacked" | "side-by-side"
+
+    if (o.uspEnabled) {
+      extras.usp = { enabled: true, items: Array.isArray(o.uspItems) ? o.uspItems : [] };
+    }
+    if (o.trustBadgesEnabled) {
+      extras.trustBadges = {
+        enabled: true,
+        images: Array.isArray(o.trustBadgeImages) ? o.trustBadgeImages : [],
+      };
+    }
+    if (o.showMoneySummary != null) extras.showMoneySummary = Boolean(o.showMoneySummary);
+
+    if (o.videoEnabled) {
+      extras.video = {
+        enabled: true,
+        thumbnailUrl: o.videoThumbnailUrl ?? null,
+        linkUrl: o.videoLinkUrl ?? null,
+      };
+    }
+    if (Array.isArray(o.contentBlocks) && o.contentBlocks.length) {
+      extras.contentBlocks = o.contentBlocks;
+    }
+
+    return extras;
+  } catch {
+    return {}; // fail-safe: never break the base payload
+  }
+}
