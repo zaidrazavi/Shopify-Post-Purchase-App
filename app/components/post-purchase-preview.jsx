@@ -135,9 +135,9 @@ export function PostPurchasePreview({ offer, device }) {
 
             {/* Product row: image left / buy box right */}
             <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexDirection: narrow ? "column" : "row" }}>
-              <div style={{ flex: narrow ? "1 1 auto" : "0 0 46%", width: narrow ? "100%" : "46%" }}>
+              <div style={{ flex: narrow ? "1 1 auto" : "0 0 40%", width: narrow ? "100%" : "40%" }}>
                 {o.imageUrl ? (
-                  <img src={o.imageUrl} alt={o.productTitle || ""} style={{ width: "100%", borderRadius: 8, border: "1px solid #eee", display: "block" }} />
+                  <img src={o.imageUrl} alt={o.productTitle || ""} style={{ width: "100%", objectFit: "contain", borderRadius: 8, border: "1px solid #eee", display: "block" }} />
                 ) : (
                   <div style={{ width: "100%", aspectRatio: "1", background: "#f0f0f0", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "#aaa", fontSize: 13 }}>No image</div>
                 )}

@@ -374,14 +374,14 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
       <Layout
         maxInlineSize={0.95}
         media={[
-          { viewportSize: "small", sizes: [1, 30, 1] },
-          { viewportSize: "medium", sizes: [300, 30, 0.5] },
-          { viewportSize: "large", sizes: [400, 30, 0.33] },
+          { viewportSize: "small", sizes: [1, 20, 1] },
+          { viewportSize: "medium", sizes: [220, 24, 0.62] },
+          { viewportSize: "large", sizes: [260, 30, 0.66] },
         ]}
       >
         <View>
           {offer.image ? (
-            <Image source={offer.image} description={offer.title} aspectRatio={1} fit="cover" bordered />
+            <Image source={offer.image} description={offer.title} fit="contain" bordered />
           ) : null}
         </View>
         <View />
