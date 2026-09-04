@@ -41,7 +41,7 @@ import {
   Heading1, TextCursorInput, Clock, ListChecks, DollarSign, MousePointerClick, Eye, Paintbrush,
   Video, LayoutList, Plus, Trash2, ArrowUp, ArrowDown,
   HelpCircle, Type, Image as ImageIcon, Minus, PanelLeft, PanelRight, AlignCenter,
-  ShoppingCart, MoreVertical, GripVertical, Images,
+  ShoppingCart, MoreVertical, GripVertical, Images, Sparkles, Megaphone,
 } from "lucide-react";
 
 const VALID_TYPES = ["pre-purchase", "post-purchase", "thank-you"];
@@ -66,8 +66,26 @@ function withEditorDefaults(es) {
   const s = es && typeof es === "object" && !Array.isArray(es) ? es : {};
   const g = (k) => (s[k] && typeof s[k] === "object" ? s[k] : {});
   const d = g("displayOffer"), h = g("heading"), c = g("countdown"), p = g("product"), t = g("textVideo");
+  const mb = g("messageBanner"), pb = g("promoBanner");
   return {
     previewType: s.previewType ?? "one_time_and_sub",
+    productLayout: s.productLayout ?? "image_left", // image_left | image_top | banner
+    messageBanner: {
+      enabled: mb.enabled ?? false,
+      text: mb.text ?? "It's not too late to add this to your order at a special discount!",
+      bg: mb.bg ?? "#22C55E",
+      textColor: mb.textColor ?? "#FFFFFF",
+      showIcon: mb.showIcon ?? true,
+      showTimer: mb.showTimer ?? true,
+    },
+    promoBanner: {
+      enabled: pb.enabled ?? false,
+      title: pb.title ?? "",
+      description: pb.description ?? "",
+      buttonText: pb.buttonText ?? "Learn More",
+      buttonUrl: pb.buttonUrl ?? "",
+      imageUrl: pb.imageUrl ?? "",
+    },
     displayOffer: {
       hideIfSubscription: d.hideIfSubscription ?? false,
       allowSubscription: d.allowSubscription ?? true,
@@ -128,7 +146,7 @@ function normalizeOffer(o, type) {
     discountValue: o.discountValue ?? "",
     showCompareAt: o.showCompareAt ?? true,
     showSavings: o.showSavings ?? true,
-    buttonText: o.buttonText ?? (isPP ? "Complete Purchase" : "Add to my order"),
+    buttonText: o.buttonText ?? (isPP ? "Complete Purchase • {{total}}" : "Add to my order"),
     buttonColor: o.buttonColor ?? "#EF6E7B",
     acceptButtonHoverColor: o.acceptButtonHoverColor ?? "#C85A66",
     declineText: o.declineText ?? (isPP ? "Decline this offer" : "No thanks"),
@@ -567,7 +585,7 @@ function AddContentBlock({ blocks, onChange }) {
 }
 
 /* ─── OCU post-purchase left panel ─── */
-function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
+function OcuPanel({ draft, set, setES, setESRoot, hasProduct, openPicker }) {
   const es = draft.editorSettings;
   const imgSizeSeg = [
     { value: "small", label: "S" },
@@ -586,6 +604,16 @@ function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
           Your live post-purchase offers automatically inherit your Shopify checkout styles.{" "}
           <span className="text-blue-600">Configure preview settings</span> to better match this preview.
         </div>
+      </SectionItem>
+
+      {/* 1b. Message Banner (Kaching-style) */}
+      <SectionItem value="pp-message" icon={Sparkles} title="Message Banner">
+        <SwitchRow label="Enable Message Banner" checked={es.messageBanner.enabled} onChange={(v) => setES("messageBanner", "enabled", v)} />
+        <CountedInput label="Banner Text" value={es.messageBanner.text} onChange={(v) => setES("messageBanner", "text", v)} max={120} placeholder="It's not too late to add this to your order…" />
+        <ColorSwatchRow label="Background Color" value={es.messageBanner.bg} onChange={(v) => setES("messageBanner", "bg", v)} />
+        <ColorSwatchRow label="Text Color" value={es.messageBanner.textColor} onChange={(v) => setES("messageBanner", "textColor", v)} />
+        <SwitchRow label="Show Icon" checked={es.messageBanner.showIcon} onChange={(v) => setES("messageBanner", "showIcon", v)} help="Shows a 🔥 before the message text." />
+        <SwitchRow label="Show Timer in Banner" checked={es.messageBanner.showTimer} onChange={(v) => setES("messageBanner", "showTimer", v)} help="Shows the countdown inline in the banner (uses the Countdown Timer duration)." />
       </SectionItem>
 
       {/* 2. Heading */}
@@ -685,6 +713,16 @@ function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
 
         {/* Image */}
         <div className="border-t pt-3 space-y-3">
+          <Seg
+            label="Product Layout"
+            options={[
+              { value: "image_left", icon: PanelLeft },
+              { value: "image_top", icon: LayoutList },
+              { value: "banner", icon: ImageIcon },
+            ]}
+            value={es.productLayout}
+            onChange={(v) => setESRoot("productLayout", v)}
+          />
           <Seg label="Image Size" options={imgSizeSeg} value={draft.imageSize} onChange={(v) => set("imageSize", v)} />
           <Seg label="Image Resizing" options={[{ value: "fit", label: "Fit" }, { value: "fill", label: "Fill" }]} value={fitVal} onChange={(v) => set("imageFit", v === "fill" ? "cover" : "contain")} />
           <SwitchRow label="Image Border" checked={draft.imageBorder} onChange={(v) => set("imageBorder", v)} />
@@ -779,14 +817,8 @@ function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label className="text-xs">Accept button text</Label>
-            <Input value={draft.buttonText} onChange={(e) => set("buttonText", e.target.value)} className="mt-1 h-9" />
-          </div>
-          <div>
-            <Label className="text-xs">Decline button text</Label>
-            <Input value={draft.declineText} onChange={(e) => set("declineText", e.target.value)} className="mt-1 h-9" />
-          </div>
+          <CountedInput label="CTA Text" value={draft.buttonText} onChange={(v) => set("buttonText", v)} max={40} placeholder="Complete Purchase • {{total}}" help="Use {{total}} to insert the offer price. Leave it out to show plain text." />
+          <CountedInput label="Decline Text" value={draft.declineText} onChange={(v) => set("declineText", v)} max={40} placeholder="Decline this offer" />
           <SwitchRow label="Payment Disclaimer" checked={es.product.paymentDisclaimer} onChange={(v) => setES("product", "paymentDisclaimer", v)} />
         </div>
 
@@ -849,6 +881,31 @@ function OcuPanel({ draft, set, setES, hasProduct, openPicker }) {
         <ContentBlocksEditor blocks={draft.contentBlocks} onChange={(v) => set("contentBlocks", v)} />
         <AddContentBlock blocks={draft.contentBlocks} onChange={(v) => set("contentBlocks", v)} />
       </SectionItem>
+
+      {/* Promotional Banner (Kaching-style) */}
+      <SectionItem value="pp-promo" icon={Megaphone} title="Promotional Banner">
+        <SwitchRow label="Enable Promotional Banner" checked={es.promoBanner.enabled} onChange={(v) => setES("promoBanner", "enabled", v)} />
+        <div>
+          <Label className="text-xs">Banner Title</Label>
+          <Input value={es.promoBanner.title} onChange={(e) => setES("promoBanner", "title", e.target.value)} placeholder="Check out our partner!" className="mt-1 h-9" />
+        </div>
+        <div>
+          <Label className="text-xs">Banner Description</Label>
+          <Textarea value={es.promoBanner.description} onChange={(e) => setES("promoBanner", "description", e.target.value)} placeholder="Promotional text…" className="mt-1 min-h-[56px] resize-none text-xs" />
+        </div>
+        <div>
+          <Label className="text-xs">Button Text</Label>
+          <Input value={es.promoBanner.buttonText} onChange={(e) => setES("promoBanner", "buttonText", e.target.value)} placeholder="Learn More" className="mt-1 h-9" />
+        </div>
+        <div>
+          <Label className="text-xs">Button Link URL</Label>
+          <Input value={es.promoBanner.buttonUrl} onChange={(e) => setES("promoBanner", "buttonUrl", e.target.value)} placeholder="https://…" className="mt-1 h-9 text-xs" />
+        </div>
+        <div>
+          <Label className="text-xs">Banner Image URL</Label>
+          <Input value={es.promoBanner.imageUrl} onChange={(e) => setES("promoBanner", "imageUrl", e.target.value)} placeholder="https://… (optional)" className="mt-1 h-9 text-xs" />
+        </div>
+      </SectionItem>
     </Accordion>
   );
 }
@@ -869,6 +926,8 @@ export default function OfferEditor() {
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
   const setES = (group, key, value) =>
     setDraft((d) => ({ ...d, editorSettings: { ...d.editorSettings, [group]: { ...d.editorSettings[group], [key]: value } } }));
+  const setESRoot = (key, value) =>
+    setDraft((d) => ({ ...d, editorSettings: { ...d.editorSettings, [key]: value } }));
 
   const save = () =>
     fetcher.submit({ intent: "update-offer", data: JSON.stringify(draft) }, { method: "post" });
@@ -943,7 +1002,7 @@ export default function OfferEditor() {
         {/* LEFT */}
         <div className="lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto lg:pr-1">
           {isPP ? (
-            <OcuPanel draft={draft} set={set} setES={setES} hasProduct={hasProduct} openPicker={() => setPickerOpen(true)} />
+            <OcuPanel draft={draft} set={set} setES={setES} setESRoot={setESRoot} hasProduct={hasProduct} openPicker={() => setPickerOpen(true)} />
           ) : (
             <Accordion type="multiple" defaultValue={["headline", "product"]} className="space-y-2">
               {/* 1. Headline */}

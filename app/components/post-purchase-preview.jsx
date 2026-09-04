@@ -92,8 +92,15 @@ export function PostPurchasePreview({ offer, device, storeName }) {
 
   const p = pricing(o);
   const header = o.headline || `Add ${o.productTitle || "a Product Title"} to your order`;
-  const acceptText = o.buttonText || "Complete Purchase";
+  const fmtCta = (text, fallback) => {
+    const base = (text && String(text).trim()) || fallback;
+    return base.includes("{{total}}") ? base.replace(/\{\{\s*total\s*\}\}/g, money(p.final)) : base;
+  };
+  const acceptText = fmtCta(o.buttonText, `Complete Purchase • ${money(p.final)}`);
   const declineText = o.declineText || "Decline this offer";
+  const productLayout = es.productLayout || "image_left";
+  const msg = es.messageBanner || {};
+  const promo = es.promoBanner || {};
   const sideBySide = o.buttonsPosition === "side-by-side";
   const uspItems = Array.isArray(o.uspItems) ? o.uspItems : [];
   const trust = Array.isArray(o.trustBadgeImages) ? o.trustBadgeImages : [];
@@ -107,6 +114,8 @@ export function PostPurchasePreview({ offer, device, storeName }) {
   const imgWidth = narrow ? "100%" : IMG_WIDTH[o.imageSize] || "40%";
   const imgFit = o.imageFit === "cover" ? "cover" : "contain";
   const allowSub = esDisplay.allowSubscription !== false;
+  const stackLayout = narrow || productLayout === "image_top" || productLayout === "banner";
+  const imageColWidth = productLayout === "banner" ? "100%" : narrow ? "100%" : stackLayout ? "55%" : imgWidth;
 
   const badgeEl =
     o.badgeEnabled && badgePos !== "none" ? (
@@ -128,7 +137,7 @@ export function PostPurchasePreview({ offer, device, storeName }) {
         borderRadius: 6, fontWeight: 600, fontSize: 15, cursor: "default",
       }}
     >
-      {acceptText} • {money(p.final)}
+      {acceptText}
     </div>
   );
   const declineBtn = (
@@ -264,6 +273,15 @@ export function PostPurchasePreview({ offer, device, storeName }) {
             <div style={{ color: BLUE, fontSize: 13, marginTop: 2 }}>View order confirmation ›</div>
           </div>
 
+          {/* Message banner (Kaching-style) */}
+          {msg.enabled ? (
+            <div style={{ background: msg.bg || "#22C55E", color: msg.textColor || "#fff", padding: "10px 16px", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, textAlign: "center" }}>
+              {msg.showIcon ? <span>🔥</span> : null}
+              <span>{msg.text || ""}</span>
+              {msg.showTimer && o.timerEnabled ? <span style={{ fontWeight: 700 }}>{mm}:{ss}</span> : null}
+            </div>
+          ) : null}
+
           {/* Heading */}
           {o.headlineEnabled !== false ? (
             <div
@@ -294,8 +312,8 @@ export function PostPurchasePreview({ offer, device, storeName }) {
 
           {/* Upsell product */}
           <div style={{ paddingTop: padPx(esProduct.top ?? 50) + 12, paddingBottom: padPx(esProduct.bottom ?? 40) + 12, paddingLeft: 24, paddingRight: 24 }}>
-            <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexDirection: narrow ? "column" : "row" }}>
-              <div style={{ flex: narrow ? "1 1 auto" : `0 0 ${imgWidth}`, width: imgWidth }}>
+            <div style={{ display: "flex", gap: 20, alignItems: stackLayout ? "stretch" : "flex-start", flexDirection: stackLayout ? "column" : "row" }}>
+              <div style={{ flex: stackLayout ? "1 1 auto" : `0 0 ${imageColWidth}`, width: imageColWidth, alignSelf: productLayout === "image_top" && !narrow ? "center" : "auto" }}>
                 {o.imageUrl ? (
                   <img src={o.imageUrl} alt={o.productTitle || ""} style={{ width: "100%", objectFit: imgFit, borderRadius: 8, border: o.imageBorder ? `1px solid ${LINE}` : "none", display: "block" }} />
                 ) : (
@@ -396,6 +414,20 @@ export function PostPurchasePreview({ offer, device, storeName }) {
                 )
               ) : null}
               {blocks.map((b, i) => <Block key={i} b={b} i={i} />)}
+            </div>
+          ) : null}
+
+          {/* Promotional banner (Kaching-style) */}
+          {promo.enabled ? (
+            <div style={{ margin: "0 24px 22px", border: `1px solid ${LINE}`, borderRadius: 10, padding: 16, display: "flex", gap: 14, alignItems: "center", flexDirection: narrow ? "column" : "row" }}>
+              {promo.imageUrl ? <img src={promo.imageUrl} alt="" style={{ width: narrow ? "100%" : 90, height: narrow ? "auto" : 90, objectFit: "contain", borderRadius: 8 }} /> : null}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {promo.title ? <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{promo.title}</div> : null}
+                {promo.description ? <div style={{ fontSize: 13, color: SUBTLE, lineHeight: 1.45 }}>{promo.description}</div> : null}
+              </div>
+              {promo.buttonText ? (
+                <div style={{ border: `1px solid ${BLUE}`, color: BLUE, borderRadius: 6, padding: "9px 16px", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>{promo.buttonText}</div>
+              ) : null}
             </div>
           ) : null}
         </div>

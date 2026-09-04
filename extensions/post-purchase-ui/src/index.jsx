@@ -113,6 +113,23 @@ function renderBlock(b, i) {
           ) : null}
         </BlockStack>
       ) : null;
+    case "text_image":
+      return (
+        <BlockStack key={i} spacing="tight">
+          {b.text ? <TextBlock>{b.text}</TextBlock> : null}
+          {b.imageUrl ? <Image source={b.imageUrl} description="" aspectRatio={1.6} fit="cover" /> : null}
+        </BlockStack>
+      );
+    case "text_video":
+      return (
+        <BlockStack key={i} spacing="tight">
+          {b.text ? <TextBlock>{b.text}</TextBlock> : null}
+          {b.thumbnailUrl ? <Image source={b.thumbnailUrl} description="" aspectRatio={1.6} fit="cover" /> : null}
+          {b.linkUrl ? <Button plain to={b.linkUrl}>Watch video</Button> : null}
+        </BlockStack>
+      );
+    // "countdown" / "buybox" content blocks are preview-only (they need the live
+    // timer / accept action from component scope) — safely skipped here.
     default:
       return null;
   }
@@ -268,14 +285,23 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     </Text>
   );
 
+  // CTA text supports a {{total}} template token → the formatted offer price.
+  // Existing offers (no token) render exactly as their configured text.
+  const totalStr = `${finalPrice}${displayCurrency ? ` ${displayCurrency}` : ""}`;
+  const ctaBase = offer.acceptButtonText || `Complete Purchase • ${totalStr}`;
+  const ctaLabel = ctaBase.includes("{{total}}")
+    ? ctaBase.replace(/\{\{\s*total\s*\}\}/g, totalStr)
+    : ctaBase;
+  const declineLabel = offer.declineButtonText || "Decline this offer";
+
   const acceptBtn = (
     <Button submit onPress={acceptOffer} loading={processing} disabled={loading || processing}>
-      {offer.acceptButtonText}
+      {ctaLabel}
     </Button>
   );
   const declineBtn = (
     <Button plain onPress={declineOffer} disabled={processing}>
-      {offer.declineButtonText}
+      {declineLabel}
     </Button>
   );
 
@@ -289,7 +315,10 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
       offer.showMoneySummary != null ||
       offer.video ||
       (Array.isArray(offer.contentBlocks) && offer.contentBlocks.length) ||
-      offer.buttonsPosition,
+      offer.buttonsPosition ||
+      offer.messageBanner ||
+      offer.promoBanner ||
+      offer.productLayout,
   );
 
   // ── Fallback: original layout, byte-for-byte as before ──
@@ -347,7 +376,9 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
   const badgePos = offer.badge?.position || "above_title";
   const badgeNode =
     offer.badge?.enabled && badgePos !== "none" ? (
-      <Text emphasized>{(offer.badge.useIcon ? "🏆 " : "") + (offer.badge.text || "")}</Text>
+      // remote-ui has no custom-color pill; `appearance="warning"` gives the
+      // closest filled/accented look, plus the trophy icon.
+      <Text appearance="warning" emphasized>{(offer.badge.useIcon ? "🏆 " : "") + (offer.badge.text || "")}</Text>
     ) : null;
 
   // Image size → Layout media sizes (fixed image column width per breakpoint).
@@ -372,8 +403,144 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
       </BlockStack>
     );
 
+  // Buy-box detail column (badge/title/price/usp/money/buttons) — shared across
+  // all product layouts.
+  const detailsStack = (
+    <BlockStack spacing="base">
+      {badgePos === "above_title" ? badgeNode : null}
+      <Heading level={3}>{offer.title}</Heading>
+      {badgePos === "under_title" ? badgeNode : null}
+      {offer.description ? <TextBlock subdued>{offer.description}</TextBlock> : null}
+      {badgePos === "next_to_price" ? (
+        <InlineStack spacing="tight">
+          {priceNode}
+          {badgeNode}
+        </InlineStack>
+      ) : (
+        priceNode
+      )}
+      {offer.usp?.enabled && Array.isArray(offer.usp.items) && offer.usp.items.length ? (
+        <BlockStack spacing="xtight">
+          {offer.usp.items.map((it, i) => (
+            <Text key={i}>• {it?.text || ""}</Text>
+          ))}
+        </BlockStack>
+      ) : null}
+      {error ? <TextBlock appearance="critical">{error}</TextBlock> : null}
+      {offer.showMoneySummary ? (
+        <BlockStack spacing="tight">
+          <Separator />
+          {!offer.hideSubtotalLine ? (
+            <Bookend trailing>
+              <Text subdued>Subtotal</Text>
+              <Text>{finalPrice} {displayCurrency}</Text>
+            </Bookend>
+          ) : null}
+          {!offer.hideTotalLine ? (
+            <Bookend trailing>
+              <Text emphasized>Total</Text>
+              <Text emphasized>{finalPrice} {displayCurrency}</Text>
+            </Bookend>
+          ) : null}
+          <TextBlock subdued size="small">Including N/A in taxes</TextBlock>
+        </BlockStack>
+      ) : null}
+      {buttonsNode}
+    </BlockStack>
+  );
+
+  const imageNode = offer.image ? (
+    <Image source={offer.image} description={offer.title} fit={imgFit} bordered />
+  ) : null;
+
+  // Product layout: image_left (side-by-side) | image_top (centered image over
+  // details) | banner (full-width image over details).
+  const productLayout = offer.productLayout || "image_left";
+  let productSection;
+  if (productLayout === "image_top" || productLayout === "banner") {
+    productSection = (
+      <BlockStack spacing="loose">
+        {imageNode ? (
+          productLayout === "banner" ? (
+            <View>{imageNode}</View>
+          ) : (
+            <Layout
+              maxInlineSize={0.6}
+              media={[
+                { viewportSize: "small", sizes: [1] },
+                { viewportSize: "medium", sizes: [1] },
+                { viewportSize: "large", sizes: [1] },
+              ]}
+            >
+              <View>{imageNode}</View>
+            </Layout>
+          )
+        ) : null}
+        {detailsStack}
+      </BlockStack>
+    );
+  } else {
+    productSection = (
+      <Layout
+        maxInlineSize={0.95}
+        media={[
+          { viewportSize: "small", sizes: [1, 20, 1] },
+          { viewportSize: "medium", sizes: [imgSz.medium, 24, "fill"] },
+          { viewportSize: "large", sizes: [imgSz.large, 30, "fill"] },
+        ]}
+      >
+        <View>{imageNode}</View>
+        <View />
+        {detailsStack}
+      </Layout>
+    );
+  }
+
+  // Message banner (Kaching-style) — colors are theme-locked, so this uses a
+  // CalloutBanner; icon + optional inline timer come from the payload.
+  const mb = offer.messageBanner;
+  const messageBannerNode = mb?.enabled ? (
+    <CalloutBanner border="block" background="secondary" spacing="tight" alignment="center">
+      <Text emphasized>
+        {(mb.showIcon ? "🔥 " : "") + (mb.text || "")}
+        {mb.showTimer && showCountdown ? `  ${minutes}:${seconds}` : ""}
+      </Text>
+    </CalloutBanner>
+  ) : null;
+
+  // Constrained video (max ~0.6 inline size so it isn't full-viewport).
+  const videoNode =
+    offer.video?.enabled && offer.video.thumbnailUrl ? (
+      <Layout
+        maxInlineSize={0.6}
+        media={[
+          { viewportSize: "small", sizes: [1] },
+          { viewportSize: "medium", sizes: [1] },
+          { viewportSize: "large", sizes: [1] },
+        ]}
+      >
+        <View>{renderBlock({ type: "video", thumbnailUrl: offer.video.thumbnailUrl, linkUrl: offer.video.linkUrl }, "video")}</View>
+      </Layout>
+    ) : null;
+
+  // Promotional banner (Kaching-style) at the very bottom.
+  const promo = offer.promoBanner;
+  const promoBannerNode = promo?.enabled ? (
+    <BlockStack spacing="tight">
+      <Separator />
+      {promo.imageUrl ? <Image source={promo.imageUrl} description="" aspectRatio={2.4} fit="contain" /> : null}
+      {promo.title ? <Heading level={3}>{promo.title}</Heading> : null}
+      {promo.description ? <TextBlock subdued>{promo.description}</TextBlock> : null}
+      {promo.buttonText && promo.buttonUrl ? (
+        <Button plain to={promo.buttonUrl}>{promo.buttonText}</Button>
+      ) : null}
+    </BlockStack>
+  ) : null;
+
   return (
     <BlockStack spacing="loose">
+      {messageBannerNode}
+
       {showCountdown ? (
         <CalloutBanner border="block" background="secondary" spacing="tight" alignment="center">
           <Text emphasized>
@@ -388,67 +555,7 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
         </BlockStack>
       ) : null}
 
-      <Layout
-        maxInlineSize={0.95}
-        media={[
-          { viewportSize: "small", sizes: [1, 20, 1] },
-          { viewportSize: "medium", sizes: [imgSz.medium, 24, "fill"] },
-          { viewportSize: "large", sizes: [imgSz.large, 30, "fill"] },
-        ]}
-      >
-        <View>
-          {offer.image ? (
-            <Image source={offer.image} description={offer.title} fit={imgFit} bordered />
-          ) : null}
-        </View>
-        <View />
-        <BlockStack spacing="base">
-          {badgePos === "above_title" ? badgeNode : null}
-
-          <Heading level={3}>{offer.title}</Heading>
-          {badgePos === "under_title" ? badgeNode : null}
-          {offer.description ? <TextBlock subdued>{offer.description}</TextBlock> : null}
-
-          {badgePos === "next_to_price" ? (
-            <InlineStack spacing="tight">
-              {priceNode}
-              {badgeNode}
-            </InlineStack>
-          ) : (
-            priceNode
-          )}
-
-          {offer.usp?.enabled && Array.isArray(offer.usp.items) && offer.usp.items.length ? (
-            <BlockStack spacing="xtight">
-              {offer.usp.items.map((it, i) => (
-                <Text key={i}>• {it?.text || ""}</Text>
-              ))}
-            </BlockStack>
-          ) : null}
-
-          {error ? <TextBlock appearance="critical">{error}</TextBlock> : null}
-
-          {offer.showMoneySummary ? (
-            <BlockStack spacing="tight">
-              <Separator />
-              {!offer.hideSubtotalLine ? (
-                <Bookend trailing>
-                  <Text subdued>Subtotal</Text>
-                  <Text>{finalPrice} {displayCurrency}</Text>
-                </Bookend>
-              ) : null}
-              {!offer.hideTotalLine ? (
-                <Bookend trailing>
-                  <Text emphasized>Total</Text>
-                  <Text emphasized>{finalPrice} {displayCurrency}</Text>
-                </Bookend>
-              ) : null}
-            </BlockStack>
-          ) : null}
-
-          {buttonsNode}
-        </BlockStack>
-      </Layout>
+      {productSection}
 
       {offer.trustBadges?.enabled &&
       Array.isArray(offer.trustBadges.images) &&
@@ -460,11 +567,11 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
         </Tiles>
       ) : null}
 
-      {offer.video?.enabled && offer.video.thumbnailUrl
-        ? renderBlock({ type: "video", thumbnailUrl: offer.video.thumbnailUrl, linkUrl: offer.video.linkUrl }, "video")
-        : null}
+      {videoNode}
 
       {sortedBlocks.length ? <BlockStack spacing="base">{sortedBlocks.map(renderBlock)}</BlockStack> : null}
+
+      {promoBannerNode}
     </BlockStack>
   );
 }

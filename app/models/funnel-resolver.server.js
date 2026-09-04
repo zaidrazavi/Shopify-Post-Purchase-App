@@ -416,6 +416,30 @@ export function postPurchaseExtras(resolved) {
       extras.contentBlocks = o.contentBlocks;
     }
 
+    // Kaching-style additions — only emitted when enabled/present, so existing
+    // offers stay byte-identical. Colors are omitted (checkout-theme-locked).
+    const mb = es.messageBanner && typeof es.messageBanner === "object" ? es.messageBanner : null;
+    if (mb?.enabled) {
+      extras.messageBanner = {
+        enabled: true,
+        text: mb.text ?? null,
+        showIcon: mb.showIcon !== false,
+        showTimer: mb.showTimer !== false,
+      };
+    }
+    if (es.productLayout) extras.productLayout = es.productLayout; // image_left|image_top|banner
+    const pb = es.promoBanner && typeof es.promoBanner === "object" ? es.promoBanner : null;
+    if (pb?.enabled) {
+      extras.promoBanner = {
+        enabled: true,
+        title: pb.title ?? null,
+        description: pb.description ?? null,
+        buttonText: pb.buttonText ?? null,
+        buttonUrl: pb.buttonUrl ?? null,
+        imageUrl: pb.imageUrl ?? null,
+      };
+    }
+
     return extras;
   } catch {
     return {}; // fail-safe: never break the base payload
