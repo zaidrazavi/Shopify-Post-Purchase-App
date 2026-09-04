@@ -92,12 +92,18 @@ export function PostPurchasePreview({ offer, device, storeName }) {
 
   const p = pricing(o);
   const header = o.headline || `Add ${o.productTitle || "a Product Title"} to your order`;
-  const fmtCta = (text, fallback) => {
-    const base = (text && String(text).trim()) || fallback;
-    return base.includes("{{total}}") ? base.replace(/\{\{\s*total\s*\}\}/g, money(p.final)) : base;
-  };
-  const acceptText = fmtCta(o.buttonText, `Complete Purchase • ${money(p.final)}`);
-  const declineText = o.declineText || "Decline this offer";
+  // Match the live extension: known legacy defaults are treated as "unset" so
+  // the new post-purchase defaults show; genuinely custom text is preserved.
+  const LEGACY_ACCEPT = new Set([
+    "Add This Gift To My Order", "Yes, Add This To My Order",
+    "Add to Order", "Add to order", "Add to my order", "Add This To My Order",
+  ]);
+  const LEGACY_DECLINE = new Set(["I'd rather pay full price", "No thanks", "No, thanks"]);
+  const acceptRaw = (o.buttonText || "").trim();
+  const ctaBase = acceptRaw && !LEGACY_ACCEPT.has(acceptRaw) ? acceptRaw : "Complete Purchase • {{total}}";
+  const acceptText = ctaBase.includes("{{total}}") ? ctaBase.replace(/\{\{\s*total\s*\}\}/g, money(p.final)) : ctaBase;
+  const declineRaw = (o.declineText || "").trim();
+  const declineText = declineRaw && !LEGACY_DECLINE.has(declineRaw) ? declineRaw : "Decline this offer";
   const productLayout = es.productLayout || "image_left";
   const msg = es.messageBanner || {};
   const promo = es.promoBanner || {};

@@ -286,13 +286,24 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
   );
 
   // CTA text supports a {{total}} template token → the formatted offer price.
-  // Existing offers (no token) render exactly as their configured text.
+  // The payload always carries a value (buildOfferPayload backfills a legacy
+  // default), so we treat known legacy defaults as "unset" and fall through to
+  // the new post-purchase defaults. Genuinely custom text is preserved.
   const totalStr = `${finalPrice}${displayCurrency ? ` ${displayCurrency}` : ""}`;
-  const ctaBase = offer.acceptButtonText || `Complete Purchase • ${totalStr}`;
+  const LEGACY_ACCEPT = new Set([
+    "Add This Gift To My Order", "Yes, Add This To My Order",
+    "Add to Order", "Add to order", "Add to my order", "Add This To My Order",
+  ]);
+  const LEGACY_DECLINE = new Set([
+    "I'd rather pay full price", "No thanks", "No, thanks",
+  ]);
+  const acceptRaw = (offer.acceptButtonText || "").trim();
+  const ctaBase = acceptRaw && !LEGACY_ACCEPT.has(acceptRaw) ? acceptRaw : "Complete Purchase • {{total}}";
   const ctaLabel = ctaBase.includes("{{total}}")
     ? ctaBase.replace(/\{\{\s*total\s*\}\}/g, totalStr)
     : ctaBase;
-  const declineLabel = offer.declineButtonText || "Decline this offer";
+  const declineRaw = (offer.declineButtonText || "").trim();
+  const declineLabel = declineRaw && !LEGACY_DECLINE.has(declineRaw) ? declineRaw : "Decline this offer";
 
   const acceptBtn = (
     <Button submit onPress={acceptOffer} loading={processing} disabled={loading || processing}>
@@ -537,41 +548,54 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     </BlockStack>
   ) : null;
 
+  // Contain the whole offer to a centered column (~72% of the content width) so
+  // the CTA button and cards don't stretch edge-to-edge on wide checkouts.
   return (
-    <BlockStack spacing="loose">
-      {messageBannerNode}
+    <Layout
+      maxInlineSize={0.72}
+      media={[
+        { viewportSize: "small", sizes: [1] },
+        { viewportSize: "medium", sizes: [1] },
+        { viewportSize: "large", sizes: [1] },
+      ]}
+    >
+      <View>
+        <BlockStack spacing="loose">
+          {messageBannerNode}
 
-      {showCountdown ? (
-        <CalloutBanner border="block" background="secondary" spacing="tight" alignment="center">
-          <Text emphasized>
-            Exclusive offer expires in: {minutes}:{seconds}
-          </Text>
-        </CalloutBanner>
-      ) : null}
+          {showCountdown ? (
+            <CalloutBanner border="block" background="secondary" spacing="tight" alignment="center">
+              <Text emphasized>
+                Exclusive offer expires in: {minutes}:{seconds}
+              </Text>
+            </CalloutBanner>
+          ) : null}
 
-      {offer.headline ? (
-        <BlockStack spacing="tight" alignment="center">
-          <Text size="large" emphasized>{offer.headline}</Text>
+          {offer.headline ? (
+            <BlockStack spacing="tight" alignment="center">
+              <Text size="large" emphasized>{offer.headline}</Text>
+            </BlockStack>
+          ) : null}
+
+          {productSection}
+
+          {offer.trustBadges?.enabled &&
+          Array.isArray(offer.trustBadges.images) &&
+          offer.trustBadges.images.length ? (
+            <Tiles maxPerLine={4} spacing="tight" alignment="center">
+              {offer.trustBadges.images.map((src, i) => (
+                <Image key={i} source={src} description="" aspectRatio={1} fit="contain" />
+              ))}
+            </Tiles>
+          ) : null}
+
+          {videoNode}
+
+          {sortedBlocks.length ? <BlockStack spacing="base">{sortedBlocks.map(renderBlock)}</BlockStack> : null}
+
+          {promoBannerNode}
         </BlockStack>
-      ) : null}
-
-      {productSection}
-
-      {offer.trustBadges?.enabled &&
-      Array.isArray(offer.trustBadges.images) &&
-      offer.trustBadges.images.length ? (
-        <Tiles maxPerLine={4} spacing="tight" alignment="center">
-          {offer.trustBadges.images.map((src, i) => (
-            <Image key={i} source={src} description="" aspectRatio={1} fit="contain" />
-          ))}
-        </Tiles>
-      ) : null}
-
-      {videoNode}
-
-      {sortedBlocks.length ? <BlockStack spacing="base">{sortedBlocks.map(renderBlock)}</BlockStack> : null}
-
-      {promoBannerNode}
-    </BlockStack>
+      </View>
+    </Layout>
   );
 }
