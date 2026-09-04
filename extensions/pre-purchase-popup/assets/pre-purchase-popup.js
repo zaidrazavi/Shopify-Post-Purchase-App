@@ -209,6 +209,33 @@
     var countdownInterval = null;
     // The resolved config, kept so the per-click cart re-check can read it.
     var activeCfg = null;
+    // Analytics: fire the impression at most once per page load.
+    var impressionSent = false;
+
+    // Fire-and-forget event tracking. Never awaited, never throws — the popup
+    // behaves identically whether or not this call succeeds. `keepalive` lets a
+    // dismiss/decline event still send while we navigate to checkout.
+    function track(eventType) {
+      try {
+        var shop = modal && modal.getAttribute('data-shop');
+        var appUrl = modal && modal.getAttribute('data-app-url');
+        if (!shop || !appUrl) return;
+        var p = (activeCfg && activeCfg.product) || {};
+        fetch(appUrl + '/api/track-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true,
+          body: JSON.stringify({
+            shopDomain: shop,
+            eventType: eventType,
+            productId: p.productId != null ? String(p.productId) : undefined,
+            variantId: p.variantId != null ? String(p.variantId) : undefined
+          })
+        }).catch(function () {});
+      } catch (e) {
+        /* silent — tracking must never affect the popup */
+      }
+    }
 
     function openModal(button) {
       if (!modal) return;
@@ -221,6 +248,10 @@
       void modal.offsetWidth; // reflow so the CSS transition runs
       modal.classList.add('pcu-modal--active');
       document.body.style.overflow = 'hidden';
+      if (!impressionSent) {
+        impressionSent = true;
+        track('pre_purchase_impression');
+      }
       startCountdown();
       var focusTarget = modal.querySelector('[data-pcu-add]');
       if (focusTarget) focusTarget.focus();
@@ -498,6 +529,7 @@
     if (addButton) {
       addButton.addEventListener('click', function () {
         if (addButton.classList.contains('loading')) return;
+        track('pre_purchase_click');
         var variantId = parseInt(modal.getAttribute('data-variant-id'), 10);
         var quantity = parseInt(modal.getAttribute('data-quantity'), 10) || 1;
         var button = pendingButton;
@@ -553,6 +585,7 @@
     modal.querySelectorAll('[data-pcu-decline]').forEach(function (el) {
       el.addEventListener('click', function () {
         var button = pendingButton;
+        track('pre_purchase_dismiss');
         closeModal();
         proceedToCheckout(button);
       });
@@ -560,13 +593,17 @@
 
     // Overlay = dismiss and stay on the cart.
     modal.querySelectorAll('[data-pcu-dismiss]').forEach(function (el) {
-      el.addEventListener('click', closeModal);
+      el.addEventListener('click', function () {
+        track('pre_purchase_dismiss');
+        closeModal();
+      });
     });
 
     // The X follows the configured close behavior.
     var closeBtn = modal.querySelector('[data-pcu-close]');
     if (closeBtn) {
       closeBtn.addEventListener('click', function () {
+        track('pre_purchase_dismiss');
         if (closeBehavior === 'decline') {
           var button = pendingButton;
           closeModal();
@@ -578,7 +615,10 @@
     }
 
     document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape' && !modal.hidden) closeModal();
+      if (event.key === 'Escape' && !modal.hidden) {
+        track('pre_purchase_dismiss');
+        closeModal();
+      }
     });
 
     loadConfig();

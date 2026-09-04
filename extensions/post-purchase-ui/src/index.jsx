@@ -14,7 +14,7 @@
  * previous layout, so live behavior is identical until those fields are set.
  * Colors/fonts are Shopify-checkout-theme-locked (remote-ui limitation).
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import {
   extend,
@@ -56,6 +56,27 @@ async function fetchOffer(inputData) {
   }
 
   return response.json();
+}
+
+// Fire-and-forget analytics. Never awaited, never throws — the accept/decline
+// changeset flow must always proceed regardless of tracking.
+function trackEvent(inputData, eventType, offer) {
+  try {
+    fetch(`${APP_URL}/api/track-event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        shopDomain: inputData?.shop?.domain,
+        eventType,
+        variantId: offer?.variantId != null ? String(offer.variantId) : undefined,
+        orderId: inputData?.initialPurchase?.referenceId,
+      }),
+    }).catch(() => {});
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.debug?.("track-event failed", e);
+  }
 }
 
 extend("Checkout::PostPurchase::ShouldRender", async ({ inputData, storage }) => {
@@ -159,6 +180,15 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
     if (!payload) done();
   }, [payload, done]);
 
+  // Fire the impression once, when a real offer is present.
+  const impressionSent = useRef(false);
+  useEffect(() => {
+    if (!payload || impressionSent.current) return;
+    impressionSent.current = true;
+    trackEvent(inputData, "post_purchase_impression", mainOffer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payload]);
+
   useEffect(() => {
     if (!mainOffer.countdownEnabled || step !== "main") return undefined;
     const id = setInterval(() => {
@@ -216,6 +246,7 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
   async function acceptOffer() {
     setProcessing(true);
     setError(null);
+    trackEvent(inputData, "post_purchase_accept", offer); // fire-and-forget
 
     try {
       const response = await fetch(`${APP_URL}/api/sign-changeset`, {
@@ -252,6 +283,7 @@ export function App({ storage, inputData, calculateChangeset, applyChangeset, do
   }
 
   function declineOffer() {
+    trackEvent(inputData, "post_purchase_decline", offer); // fire-and-forget
     if (step === "main" && downsellOffer) {
       setProcessing(false);
       setStep("downsell");
