@@ -221,9 +221,13 @@
         var appUrl = modal && modal.getAttribute('data-app-url');
         if (!shop || !appUrl) return;
         var p = (activeCfg && activeCfg.product) || {};
+        // Send as text/plain (a CORS-safelisted content type) so this stays a
+        // "simple" cross-origin request with NO preflight — an application/json
+        // POST from the storefront would trigger an OPTIONS preflight. The server
+        // parses the body as JSON regardless of this header.
         fetch(appUrl + '/api/track-event', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
           keepalive: true,
           body: JSON.stringify({
             shopDomain: shop,

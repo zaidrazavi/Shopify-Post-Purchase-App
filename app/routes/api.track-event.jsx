@@ -61,6 +61,12 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
+  // Answer the CORS preflight here too — depending on the router, OPTIONS may be
+  // dispatched to the action rather than the loader. (The storefront now sends a
+  // text/plain "simple" request that skips the preflight, but keep this robust.)
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
   // Everything here is best-effort: any failure returns success:false, never 500s
   // in a way that could surface to the shopper as a broken offer.
   try {
